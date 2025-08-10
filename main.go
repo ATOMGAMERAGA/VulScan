@@ -1,1693 +1,1735 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"io/ioutil"
+	"html/template"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
+	"gopkg.in/yaml.v3"
 )
 
-type VulScan struct {
-	target      string
+// Version information
+const (
+	Version = "3.0.1"
+	Banner  = `
+    ██╗   ██╗██╗   ██╗██╗     ███████╗ ██████╗ █████╗ ███╗   ██╗
+    ██║   ██║██║   ██║██║     ██╔════╝██╔════╝██╔══██╗████╗  ██║
+    ██║   ██║██║   ██║██║     ███████╗██║     ███████║██╔██╗ ██║
+    ╚██╗ ██╔╝██║   ██║██║     ╚════██║██║     ██╔══██║██║╚██╗██║
+     ╚████╔╝ ╚██████╔╝███████╗███████║╚██████╗██║  ██║██║ ╚████║
+      ╚═══╝   ╚═════╝ ╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝
+    
+    Advanced Web Security Scanner v%s
+    Developed with ❤️  by ATOMGAMERAGA
+    `
+)
+
+// Risk levels and CVSS mapping
+type RiskLevel string
+
+const (
+	RiskCritical RiskLevel = "CRITICAL"
+	RiskHigh     RiskLevel = "HIGH"
+	RiskMedium   RiskLevel = "MEDIUM"
+	RiskLow      RiskLevel = "LOW"
+	RiskInfo     RiskLevel = "INFO"
+)
+
+// Vulnerability types
+type VulnType string
+
+const (
+	SQLInjection     VulnType = "SQL_INJECTION"
+	XSS              VulnType = "XSS"
+	DirectoryTraversal VulnType = "DIRECTORY_TRAVERSAL"
+	CSRF             VulnType = "CSRF"
+	OpenRedirect     VulnType = "OPEN_REDIRECT"
+	SecurityHeaders  VulnType = "SECURITY_HEADERS"
+	SSLConfiguration VulnType = "SSL_CONFIGURATION"
+	CookieSecurity   VulnType = "COOKIE_SECURITY"
+	CommandInjection VulnType = "COMMAND_INJECTION"
+	FileUpload       VulnType = "FILE_UPLOAD"
+)
+
+// Configuration structure
+type Config struct {
+	Scan struct {
+		Threads   int    `yaml:"threads"`
+		Timeout   int    `yaml:"timeout"`
+		UserAgent string `yaml:"user_agent"`
+		RateLimit int    `yaml:"rate_limit"`
+	} `yaml:"scan"`
+	Payloads struct {
+		SQLInjection     string `yaml:"sql_injection"`
+		XSS              string `yaml:"xss"`
+		DirectoryTraversal string `yaml:"directory_traversal"`
+		CommandInjection string `yaml:"command_injection"`
+	} `yaml:"payloads"`
+	Output struct {
+		Verbose bool   `yaml:"verbose"`
+		Format  string `yaml:"format"`
+		Report  bool   `yaml:"report"`
+	} `yaml:"output"`
+}
+
+// Vulnerability finding structure
+type Finding struct {
+	ID            string            `json:"id"`
+	Type          VulnType          `json:"type"`
+	Severity      RiskLevel         `json:"severity"`
+	CVSS          float64           `json:"cvss"`
+	CWE           string            `json:"cwe"`
+	Title         string            `json:"title"`
+	Description   string            `json:"description"`
+	URL           string            `json:"url"`
+	Parameter     string            `json:"parameter,omitempty"`
+	Payload       string            `json:"payload,omitempty"`
+	Evidence      string            `json:"evidence,omitempty"`
+	Solution      string            `json:"solution"`
+	References    []string          `json:"references"`
+	Confidence    int               `json:"confidence"`
+	Timestamp     time.Time         `json:"timestamp"`
+	RequestInfo   RequestInfo       `json:"request_info"`
+	ResponseInfo  ResponseInfo      `json:"response_info"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+}
+
+type RequestInfo struct {
+	Method    string            `json:"method"`
+	Headers   map[string]string `json:"headers"`
+	Body      string            `json:"body,omitempty"`
+	UserAgent string            `json:"user_agent"`
+}
+
+type ResponseInfo struct {
+	StatusCode int               `json:"status_code"`
+	Headers    map[string]string `json:"headers"`
+	Body       string            `json:"body"`
+	Size       int               `json:"size"`
+	Time       time.Duration     `json:"response_time"`
+}
+
+// Scan result structure
+type ScanResult struct {
+	ScanInfo struct {
+		Target    string    `json:"target"`
+		Timestamp time.Time `json:"timestamp"`
+		Version   string    `json:"version"`
+		Duration  string    `json:"duration"`
+		Options   Options   `json:"options"`
+	} `json:"scan_info"`
+	Summary struct {
+		TotalFindings int                    `json:"total_findings"`
+		RiskBreakdown map[RiskLevel]int      `json:"risk_breakdown"`
+		TypeBreakdown map[VulnType]int       `json:"type_breakdown"`
+		URLs          int                    `json:"urls_tested"`
+		Requests      int                    `json:"total_requests"`
+	} `json:"summary"`
+	Findings []Finding `json:"findings"`
+	Errors   []string  `json:"errors,omitempty"`
+}
+
+// Command line options
+type Options struct {
+	Target     string `json:"target"`
+	Verbose    bool   `json:"verbose"`
+	Threads    int    `json:"threads"`
+	Timeout    int    `json:"timeout"`
+	Output     string `json:"output"`
+	UserAgent  string `json:"user_agent"`
+	Report     bool   `json:"report"`
+	ConfigFile string `json:"config_file"`
+	RateLimit  int    `json:"rate_limit"`
+	Headers    string `json:"headers"`
+	Proxy      string `json:"proxy"`
+}
+
+// Scanner structure
+type Scanner struct {
 	client      *http.Client
+	config      *Config
+	options     *Options
 	findings    []Finding
 	mutex       sync.Mutex
-	userAgent   string
-	threads     int
-	timeout     time.Duration
-	verbose     bool
-	outputFile  string
+	rateLimiter *rate.Limiter
+	errors      []string
+	stats       struct {
+		requestCount int
+		startTime    time.Time
+	}
 }
 
-type Finding struct {
-	Type        string    `json:"type"`
-	URL         string    `json:"url"`
-	Parameter   string    `json:"parameter"`
-	Payload     string    `json:"payload"`
-	Response    string    `json:"response"`
-	Risk        string    `json:"risk"`
-	Description string    `json:"description"`
-	Solution    string    `json:"solution"`
-	References  []string  `json:"references"`
-	CWE         string    `json:"cwe"`
-	CVSS        float64   `json:"cvss"`
-	Timestamp   time.Time `json:"timestamp"`
+// Payloads for different vulnerability types
+var payloads = map[VulnType][]string{
+	SQLInjection: {
+		"'",
+		"' OR '1'='1",
+		"' OR 1=1 --",
+		"' UNION SELECT NULL--",
+		"'; DROP TABLE users; --",
+		"' AND SLEEP(5) --",
+		"' OR IF(1=1,SLEEP(5),0) --",
+		"' UNION SELECT 1,2,3,4,5,version(),7,8,9,10--",
+		"admin'--",
+		"admin' #",
+		"admin'/*",
+		"' or 1=1#",
+		"' or 1=1--",
+		"' or 1=1/*",
+		") or '1'='1--",
+		") or ('1'='1--",
+	},
+	XSS: {
+		"<script>alert('XSS')</script>",
+		"<script>alert(document.cookie)</script>",
+		"<img src=x onerror=alert('XSS')>",
+		"<svg onload=alert('XSS')>",
+		"javascript:alert('XSS')",
+		"'><script>alert('XSS')</script>",
+		"\"><script>alert('XSS')</script>",
+		"<iframe src=\"javascript:alert('XSS')\">",
+		"<body onload=alert('XSS')>",
+		"<div onmouseover=\"alert('XSS')\">test</div>",
+		"<script>document.write('<img src=x onerror=alert(1)>')</script>",
+		"<script src=//brutelogic.com.br/1.js></script>",
+	},
+	DirectoryTraversal: {
+		"../",
+		"..\\",
+		"../../../etc/passwd",
+		"..\\..\\..\\windows\\system32\\drivers\\etc\\hosts",
+		"....//....//....//etc/passwd",
+		"....\\\\....\\\\....\\\\windows\\system32\\drivers\\etc\\hosts",
+		"%2e%2e%2f",
+		"%2e%2e%5c",
+		"..%252f..%252f..%252fetc%252fpasswd",
+		"..%c0%af..%c0%af..%c0%afetc%c0%afpasswd",
+	},
+	CommandInjection: {
+		"; ls",
+		"| id",
+		"& whoami",
+		"`id`",
+		"$(id)",
+		"; cat /etc/passwd",
+		"| type c:\\windows\\system32\\drivers\\etc\\hosts",
+		"& dir",
+		"; uname -a",
+		"|| id",
+		"&& id",
+		"; ping -c 4 127.0.0.1",
+	},
 }
 
-type Config struct {
-	Target     string
-	Threads    int
-	Timeout    int
-	Verbose    bool
-	OutputFile string
-	UserAgent  string
-	Headers    map[string]string
+// CWE mappings for vulnerability types
+var cweMapping = map[VulnType]string{
+	SQLInjection:     "CWE-89",
+	XSS:              "CWE-79",
+	DirectoryTraversal: "CWE-22",
+	CSRF:             "CWE-352",
+	OpenRedirect:     "CWE-601",
+	CommandInjection: "CWE-78",
+	FileUpload:       "CWE-434",
+	SecurityHeaders:  "CWE-693",
+	SSLConfiguration: "CWE-326",
+	CookieSecurity:   "CWE-614",
 }
 
-// Genişletilmiş payload'lar
-var sqlPayloads = []string{
-	"'", "\"", "' OR '1'='1", "' OR 1=1--", "\" OR \"1\"=\"1",
-	"'; DROP TABLE users;--", "' UNION SELECT NULL--", "1' AND 1=1--",
-	"admin'--", "' OR 'a'='a", "1' OR '1'='1' /*", "' UNION SELECT 1,2,3--",
-	"' AND extractvalue(1, concat(0x7e, version(), 0x7e))--",
-	"' AND (SELECT * FROM (SELECT COUNT(*),concat(version(),floor(rand(0)*2))x FROM information_schema.tables GROUP BY x)a)--",
+// CVSS scores for different vulnerability types
+var cvssScores = map[VulnType]float64{
+	SQLInjection:     9.8, // Critical
+	XSS:              8.8, // High
+	DirectoryTraversal: 7.5, // High
+	CSRF:             8.1, // High
+	OpenRedirect:     6.1, // Medium
+	CommandInjection: 9.8, // Critical
+	FileUpload:       7.5, // High
+	SecurityHeaders:  5.3, // Medium
+	SSLConfiguration: 7.4, // High
+	CookieSecurity:   4.3, // Medium
 }
 
-var xssPayloads = []string{
-	"<script>alert('XSS')</script>", "<img src=x onerror=alert('XSS')>",
-	"javascript:alert('XSS')", "<svg onload=alert('XSS')>",
-	"'><script>alert('XSS')</script>", "\"><script>alert('XSS')</script>",
-	"<iframe src=javascript:alert('XSS')>", "<body onload=alert('XSS')>",
-	"<input onfocus=alert('XSS') autofocus>", "<select onfocus=alert('XSS') autofocus>",
-	"<textarea onfocus=alert('XSS') autofocus>", "<keygen onfocus=alert('XSS') autofocus>",
-	"<video><source onerror=\"alert('XSS')\">", "<audio src=x onerror=alert('XSS')>",
+// Default configuration
+func getDefaultConfig() *Config {
+	return &Config{
+		Scan: struct {
+			Threads   int    `yaml:"threads"`
+			Timeout   int    `yaml:"timeout"`
+			UserAgent string `yaml:"user_agent"`
+			RateLimit int    `yaml:"rate_limit"`
+		}{
+			Threads:   5,
+			Timeout:   10,
+			UserAgent: fmt.Sprintf("VulScan/%s", Version),
+			RateLimit: 10,
+		},
+		Payloads: struct {
+			SQLInjection     string `yaml:"sql_injection"`
+			XSS              string `yaml:"xss"`
+			DirectoryTraversal string `yaml:"directory_traversal"`
+			CommandInjection string `yaml:"command_injection"`
+		}{
+			SQLInjection:     "payloads/sql.txt",
+			XSS:              "payloads/xss.txt",
+			DirectoryTraversal: "payloads/lfi.txt",
+			CommandInjection: "payloads/cmd.txt",
+		},
+		Output: struct {
+			Verbose bool   `yaml:"verbose"`
+			Format  string `yaml:"format"`
+			Report  bool   `yaml:"report"`
+		}{
+			Verbose: false,
+			Format:  "json",
+			Report:  false,
+		},
+	}
 }
 
-var lfiPayloads = []string{
-	"../../../etc/passwd", "..\\..\\..\\windows\\system32\\drivers\\etc\\hosts",
-	"....//....//....//etc/passwd", "..%2f..%2f..%2fetc%2fpasswd",
-	"..%252f..%252f..%252fetc%252fpasswd", "php://filter/read=convert.base64-encode/resource=index.php",
-	"/proc/version", "/proc/self/environ", "C:\\boot.ini", "C:\\windows\\system.ini",
-}
-
-var blindSQLPayloads = []string{
-	"' AND (SELECT * FROM (SELECT SLEEP(5))x)--",
-	"'; WAITFOR DELAY '0:0:5'--",
-	"' AND pg_sleep(5)--",
-	"' UNION SELECT SLEEP(5)--",
-}
-
-func NewVulScan(config Config) *VulScan {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+// Load configuration from file
+func loadConfig(configFile string) (*Config, error) {
+	config := getDefaultConfig()
+	
+	if configFile == "" {
+		return config, nil
 	}
 	
-	timeout := time.Duration(config.Timeout) * time.Second
-	if timeout == 0 {
-		timeout = 10 * time.Second
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return config, nil
 	}
-
-	client := &http.Client{
-		Transport: tr,
-		Timeout:   timeout,
+	
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
-
-	userAgent := config.UserAgent
-	if userAgent == "" {
-		userAgent = "VulScan/3.0 Advanced Security Scanner"
+	
+	if err := yaml.Unmarshal(data, config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %v", err)
 	}
-
-	return &VulScan{
-		target:     config.Target,
-		client:     client,
-		findings:   make([]Finding, 0),
-		threads:    config.Threads,
-		timeout:    timeout,
-		verbose:    config.Verbose,
-		outputFile: config.OutputFile,
-		userAgent:  userAgent,
-	}
+	
+	return config, nil
 }
 
-func (v *VulScan) addFinding(finding Finding) {
-	v.mutex.Lock()
-	defer v.mutex.Unlock()
-	finding.Timestamp = time.Now()
-	v.findings = append(v.findings, finding)
-}
-
-func (v *VulScan) makeRequest(method, url string, body string, headers map[string]string) (*http.Response, error) {
-	var req *http.Request
-	var err error
-
-	if method == "GET" {
-		req, err = http.NewRequest("GET", url, nil)
-	} else {
-		req, err = http.NewRequest("POST", url, strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-
+// Create new scanner instance
+func NewScanner(options *Options) (*Scanner, error) {
+	config, err := loadConfig(options.ConfigFile)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Set("User-Agent", v.userAgent)
 	
-	// Özel header'lar ekle
-	for key, value := range headers {
-		req.Header.Set(key, value)
+	// Override config with command line options
+	if options.Threads > 0 {
+		config.Scan.Threads = options.Threads
 	}
-
-	return v.client.Do(req)
-}
-
-func (v *VulScan) scanSQL(targetURL string, params map[string]string) {
-	if v.verbose {
-		fmt.Printf("[*] SQL Injection taraması başlatılıyor: %s\n", targetURL)
+	if options.Timeout > 0 {
+		config.Scan.Timeout = options.Timeout
 	}
-	
-	for param := range params {
-		for _, payload := range sqlPayloads {
-			testParams := make(map[string]string)
-			for k, val := range params {
-				testParams[k] = val
-			}
-			testParams[param] = payload
-
-			getURL := targetURL + "?" + encodeParams(testParams)
-			resp, err := v.makeRequest("GET", getURL, "", nil)
-			if err != nil {
-				continue
-			}
-
-			body, _ := ioutil.ReadAll(resp.Body)
-			resp.Body.Close()
-			bodyStr := string(body)
-
-			if v.detectSQLError(bodyStr) {
-				cvss := v.calculateCVSS("SQL_INJECTION")
-				v.addFinding(Finding{
-					Type:        "SQL Injection",
-					URL:         getURL,
-					Parameter:   param,
-					Payload:     payload,
-					Response:    bodyStr[:min(300, len(bodyStr))],
-					Risk:        "HIGH",
-					CVSS:        cvss,
-					Description: "SQL hata mesajı tespit edildi. Saldırgan bu açığı kullanarak veritabanına yetkisiz erişim sağlayabilir, veri çalabilir veya değiştirebilir.",
-					CWE:         "CWE-89",
-					Solution: `KAPSAMLI ÇÖZÜM ÖNERİLERİ:
-
-🔧 HEMEN YAPILACAKLAR:
-1. Parametreli sorgular (Prepared Statements) kullanın
-2. Stored procedures ile veri erişimini sınırlandırın
-3. Input validation ve sanitization uygulayın
-4. Hata mesajlarını production'da gizleyin
-
-💻 KOD ÖRNEKLERİ:
-
-PHP (PDO):
-$stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? AND name = ?");
-$stmt->execute([$user_id, $name]);
-$result = $stmt->fetchAll();
-
-Java (PreparedStatement):
-String sql = "SELECT * FROM users WHERE id = ? AND name = ?";
-PreparedStatement pstmt = connection.prepareStatement(sql);
-pstmt.setInt(1, userId);
-pstmt.setString(2, userName);
-
-Python (SQLAlchemy):
-result = session.query(User).filter(User.id == user_id).first()
-
-🛡️ GÜVENLİK KATIMLARI:
-- WAF (Web Application Firewall) kullanın
-- Database user'ı minimum yetkilerle çalıştırın
-- SQL injection detection tools kullanın
-- Düzenli güvenlik testleri yapın`,
-					References: []string{
-						"https://owasp.org/www-community/attacks/SQL_Injection",
-						"https://cwe.mitre.org/data/definitions/89.html",
-						"https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
-					},
-				})
-				if v.verbose {
-					fmt.Printf("[!] SQL Injection bulundu: %s (param: %s, CVSS: %.1f)\n", targetURL, param, cvss)
-				}
-			}
-		}
+	if options.UserAgent != "" {
+		config.Scan.UserAgent = options.UserAgent
 	}
-
-	// Blind SQL Injection testi
-	v.scanBlindSQL(targetURL, params)
-}
-
-func (v *VulScan) scanBlindSQL(targetURL string, params map[string]string) {
-	if v.verbose {
-		fmt.Printf("[*] Blind SQL Injection taraması başlatılıyor: %s\n", targetURL)
-	}
-
-	for param := range params {
-		for _, payload := range blindSQLPayloads {
-			testParams := make(map[string]string)
-			for k, val := range params {
-				testParams[k] = val
-			}
-			testParams[param] = payload
-
-			getURL := targetURL + "?" + encodeParams(testParams)
-			
-			start := time.Now()
-			resp, err := v.makeRequest("GET", getURL, "", nil)
-			elapsed := time.Since(start)
-			
-			if err != nil {
-				continue
-			}
-			resp.Body.Close()
-
-			// 4 saniyeden fazla sürdüyse blind SQL injection olabilir
-			if elapsed > 4*time.Second {
-				cvss := v.calculateCVSS("BLIND_SQL_INJECTION")
-				v.addFinding(Finding{
-					Type:        "Blind SQL Injection (Time-based)",
-					URL:         getURL,
-					Parameter:   param,
-					Payload:     payload,
-					Response:    fmt.Sprintf("Response time: %.2f seconds", elapsed.Seconds()),
-					Risk:        "HIGH",
-					CVSS:        cvss,
-					Description: "Zaman tabanlı Blind SQL Injection tespit edildi. Saldırgan veri varlığını kontrol edebilir.",
-					CWE:         "CWE-89",
-					Solution: `BLIND SQL INJECTION ÇÖZÜMÜ:
-
-🚨 DERHAL UYGULANACAK:
-- Parametreli sorgular kullanın
-- Response time'ı normalize edin
-- Rate limiting uygulayın
-
-⏱️ TİME-BASED KORUMA:
-- Query timeout'larını ayarlayın  
-- Asenkron işleme geçin
-- Response caching kullanın`,
-					References: []string{
-						"https://owasp.org/www-community/attacks/Blind_SQL_Injection",
-						"https://portswigger.net/web-security/sql-injection/blind",
-					},
-				})
-				if v.verbose {
-					fmt.Printf("[!] Blind SQL Injection bulundu: %s (%.2fs delay)\n", targetURL, elapsed.Seconds())
-				}
-			}
-		}
-	}
-}
-
-func (v *VulScan) scanXSS(targetURL string, params map[string]string) {
-	if v.verbose {
-		fmt.Printf("[*] XSS taraması başlatılıyor: %s\n", targetURL)
+	if options.RateLimit > 0 {
+		config.Scan.RateLimit = options.RateLimit
 	}
 	
-	for param := range params {
-		for _, payload := range xssPayloads {
-			testParams := make(map[string]string)
-			for k, val := range params {
-				testParams[k] = val
-			}
-			testParams[param] = payload
-
-			getURL := targetURL + "?" + encodeParams(testParams)
-			resp, err := v.makeRequest("GET", getURL, "", nil)
-			if err != nil {
-				continue
-			}
-
-			body, _ := ioutil.ReadAll(resp.Body)
-			resp.Body.Close()
-			bodyStr := string(body)
-
-			if strings.Contains(bodyStr, payload) || v.detectXSSContext(bodyStr, payload) {
-				cvss := v.calculateCVSS("XSS")
-				v.addFinding(Finding{
-					Type:        "Cross-Site Scripting (XSS)",
-					URL:         getURL,
-					Parameter:   param,
-					Payload:     payload,
-					Response:    bodyStr[:min(300, len(bodyStr))],
-					Risk:        "MEDIUM",
-					CVSS:        cvss,
-					Description: "XSS açığı tespit edildi. Saldırgan kullanıcının tarayıcısında zararlı kod çalıştırabilir.",
-					CWE:         "CWE-79",
-					Solution: `KAPSAMLI XSS KORUMA STRATEJİSİ:
-
-🔒 INPUT/OUTPUT SANİTİZASYONU:
-1. Tüm kullanıcı girdilerini encode edin
-2. Context-aware output encoding yapın
-3. Whitelist yaklaşımı benimseyin
-
-💻 UYGULAMA ÖRNEKLERİ:
-
-PHP:
-echo htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
-
-JavaScript:
-const sanitize = (str) => {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-};
-
-React:
-// Otomatik escaping - güvenli
-<div>{userInput}</div>
-// Tehlikeli - kaçının
-<div dangerouslySetInnerHTML={{__html: userInput}} />
-
-🛡️ CSP (Content Security Policy):
-Content-Security-Policy: default-src 'self'; 
-    script-src 'self' 'unsafe-inline'; 
-    style-src 'self' 'unsafe-inline';
-    img-src 'self' data: https:;
-
-🍪 COOKIE GÜVENLİĞİ:
-- HttpOnly flag ekleyin
-- Secure flag kullanın (HTTPS için)
-- SameSite=Strict ayarlayın`,
-					References: []string{
-						"https://owasp.org/www-community/attacks/xss/",
-						"https://cwe.mitre.org/data/definitions/79.html",
-						"https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
-					},
-				})
-				if v.verbose {
-					fmt.Printf("[!] XSS bulundu: %s (param: %s, CVSS: %.1f)\n", targetURL, param, cvss)
-				}
-			}
-		}
-	}
-}
-
-func (v *VulScan) scanLFI(targetURL string, params map[string]string) {
-	if v.verbose {
-		fmt.Printf("[*] Directory Traversal/LFI taraması başlatılıyor: %s\n", targetURL)
-	}
-	
-	for param := range params {
-		for _, payload := range lfiPayloads {
-			testParams := make(map[string]string)
-			for k, val := range params {
-				testParams[k] = val
-			}
-			testParams[param] = payload
-
-			getURL := targetURL + "?" + encodeParams(testParams)
-			resp, err := v.makeRequest("GET", getURL, "", nil)
-			if err != nil {
-				continue
-			}
-
-			body, _ := ioutil.ReadAll(resp.Body)
-			resp.Body.Close()
-			bodyStr := string(body)
-
-			if v.detectLFI(bodyStr) {
-				cvss := v.calculateCVSS("LFI")
-				v.addFinding(Finding{
-					Type:        "Directory Traversal/Local File Inclusion",
-					URL:         getURL,
-					Parameter:   param,
-					Payload:     payload,
-					Response:    bodyStr[:min(300, len(bodyStr))],
-					Risk:        "HIGH",
-					CVSS:        cvss,
-					Description: "Dosya sistem erişim açığı tespit edildi. Saldırgan kritik sistem dosyalarını okuyabilir.",
-					CWE:         "CWE-22",
-					Solution: `DOSYA ERİŞİM GÜVENLİĞİ:
-
-🚫 DERHAL ENGELLEYIN:
-1. Relative path karakterlerini (.., ./) filtreleyin
-2. Whitelist yaklaşımı benimseyin
-3. Dosya yolu doğrulaması yapın
-
-🔒 GÜVENLİ UYGULAMA:
-
-PHP:
-$allowedFiles = [
-    'about' => '/safe/path/about.html',
-    'contact' => '/safe/path/contact.html'
-];
-
-$file = $_GET['page'] ?? '';
-if (isset($allowedFiles[$file])) {
-    include $allowedFiles[$file];
-} else {
-    http_response_code(404);
-    die('Sayfa bulunamadı');
-}
-
-Python (Flask):
-import os
-from flask import abort, send_file
-
-def safe_file_serve(filename):
-    # Güvenli dizin
-    safe_dir = '/var/www/safe/'
-    # Path traversal koruması  
-    safe_path = os.path.realpath(os.path.join(safe_dir, filename))
-    
-    if not safe_path.startswith(safe_dir):
-        abort(403)
-    
-    if not os.path.exists(safe_path):
-        abort(404)
-        
-    return send_file(safe_path)
-
-🛡️ SİSTEM SEVİYESİ KORUMA:
-- Chroot jail kullanın
-- SELinux/AppArmor profillerini aktifleştirin
-- Dosya izinlerini minimum seviyede tutun
-- Logging ve monitoring ekleyin`,
-					References: []string{
-						"https://owasp.org/www-community/attacks/Path_Traversal",
-						"https://cwe.mitre.org/data/definitions/22.html",
-						"https://portswigger.net/web-security/file-path-traversal",
-					},
-				})
-				if v.verbose {
-					fmt.Printf("[!] Directory Traversal bulundu: %s (param: %s, CVSS: %.1f)\n", targetURL, param, cvss)
-				}
-			}
-		}
-	}
-}
-
-func (v *VulScan) scanHeaders(targetURL string) {
-	if v.verbose {
-		fmt.Printf("[*] HTTP Header güvenlik taraması başlatılıyor: %s\n", targetURL)
-	}
-	
-	resp, err := v.makeRequest("GET", targetURL, "", nil)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	securityHeaders := map[string]HeaderInfo{
-		"X-Frame-Options": {
-			Description: "Clickjacking saldırılarını önler",
-			Solution: "X-Frame-Options: DENY",
-			CVSS: 4.3,
-		},
-		"X-XSS-Protection": {
-			Description: "Tarayıcı XSS korumasını etkinleştirir",
-			Solution: "X-XSS-Protection: 1; mode=block",
-			CVSS: 3.1,
-		},
-		"X-Content-Type-Options": {
-			Description: "MIME type sniffing saldırılarını önler",
-			Solution: "X-Content-Type-Options: nosniff",
-			CVSS: 2.6,
-		},
-		"Strict-Transport-Security": {
-			Description: "HTTPS bağlantısını zorunlu kılar",
-			Solution: "Strict-Transport-Security: max-age=31536000; includeSubDomains",
-			CVSS: 5.4,
-		},
-		"Content-Security-Policy": {
-			Description: "XSS ve data injection saldırılarını önler",
-			Solution: "Content-Security-Policy: default-src 'self'",
-			CVSS: 6.1,
-		},
-		"Referrer-Policy": {
-			Description: "Referrer bilgisinin paylaşımını kontrol eder",
-			Solution: "Referrer-Policy: strict-origin-when-cross-origin",
-			CVSS: 2.3,
-		},
-		"Permissions-Policy": {
-			Description: "Tarayıcı API erişimlerini kontrol eder",
-			Solution: "Permissions-Policy: geolocation=(), microphone=(), camera=()",
-			CVSS: 3.7,
-		},
-	}
-
-	for header, info := range securityHeaders {
-		if resp.Header.Get(header) == "" {
-			v.addFinding(Finding{
-				Type:        "Missing Security Header",
-				URL:         targetURL,
-				Parameter:   header,
-				Risk:        v.getRiskLevel(info.CVSS),
-				CVSS:        info.CVSS,
-				Description: fmt.Sprintf("Eksik güvenlik header: %s - %s", header, info.Description),
-				CWE:         "CWE-693",
-				Solution: fmt.Sprintf(`GÜVENLİK HEADER YAPΙLANDIRMASI:
-
-🔧 %s HEADER'I:
-%s
-
-📋 UYGULAMA ÖRNEKLERİ:
-
-Apache (.htaccess):
-Header always set %s "%s"
-
-Nginx:
-add_header %s "%s" always;
-
-Express.js:
-app.use((req, res, next) => {
-    res.setHeader('%s', '%s');
-    next();
-});
-
-PHP:
-header('%s: %s');`, header, info.Solution, header, getDefaultHeaderValue(header), header, getDefaultHeaderValue(header), header, getDefaultHeaderValue(header), header, getDefaultHeaderValue(header)),
-				References: []string{
-					"https://owasp.org/www-project-secure-headers/",
-					"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/" + header,
-				},
-			})
-		}
-	}
-
-	// Server/Technology disclosure
-	v.scanTechDisclosure(resp, targetURL)
-}
-
-func (v *VulScan) scanTechDisclosure(resp *http.Response, targetURL string) {
-	disclosureHeaders := []string{"Server", "X-Powered-By", "X-AspNet-Version", "X-Generator"}
-	
-	for _, header := range disclosureHeaders {
-		if value := resp.Header.Get(header); value != "" {
-			v.addFinding(Finding{
-				Type:        "Information Disclosure",
-				URL:         targetURL,
-				Parameter:   header,
-				Response:    value,
-				Risk:        "LOW",
-				CVSS:        2.1,
-				Description: fmt.Sprintf("%s header'ı teknoloji bilgisi açığa çıkarıyor: %s", header, value),
-				CWE:         "CWE-200",
-				Solution: `BİLGİ SIZINTISI ÖNLEME:
-
-🔒 HEADER'LARI GİZLEYİN:
-
-Apache:
-ServerTokens Prod
-ServerSignature Off
-Header unset X-Powered-By
-Header unset X-Generator
-
-Nginx:
-server_tokens off;
-more_clear_headers 'Server';
-more_clear_headers 'X-Powered-By';
-
-PHP:
-expose_php = Off
-
-Express.js:
-app.disable('x-powered-by');
-
-IIS web.config:
-<system.web>
-    <httpRuntime enableVersionHeader="false" />
-</system.web>
-<system.webServer>
-    <httpProtocol>
-        <customHeaders>
-            <remove name="X-Powered-By" />
-        </customHeaders>
-    </httpProtocol>
-</system.webServer>`,
-				References: []string{
-					"https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/01-Information_Gathering/08-Fingerprint_Web_Application_Framework",
-				},
-			})
-		}
-	}
-}
-
-func (v *VulScan) scanSSL(targetURL string) {
-	if !strings.HasPrefix(targetURL, "https://") {
-		return
-	}
-
-	if v.verbose {
-		fmt.Printf("[*] SSL/TLS güvenlik taraması başlatılıyor: %s\n", targetURL)
-	}
-
-	// TLS version check için özel client
+	// Create HTTP client with custom configuration
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
-			MinVersion:         tls.VersionTLS10, // Test için tüm versiyonları kabul et
+			MinVersion:         tls.VersionTLS12,
+		},
+		MaxIdleConns:       100,
+		IdleConnTimeout:    30 * time.Second,
+		DisableCompression: false,
+	}
+	
+	// Add proxy support if provided
+	if options.Proxy != "" {
+		proxyURL, err := url.Parse(options.Proxy)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy URL: %v", err)
+		}
+		tr.Proxy = http.ProxyURL(proxyURL)
+	}
+	
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   time.Duration(config.Scan.Timeout) * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // Don't follow redirects automatically
 		},
 	}
 	
-	client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
-	resp, err := client.Get(targetURL)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.TLS != nil {
-		// Eski TLS versiyonu kontrolü
-		if resp.TLS.Version < tls.VersionTLS12 {
-			v.addFinding(Finding{
-				Type:        "Weak TLS Version",
-				URL:         targetURL,
-				Risk:        "MEDIUM",
-				CVSS:        5.8,
-				Description: fmt.Sprintf("Zayıf TLS versiyonu kullanılıyor: %s", getTLSVersion(resp.TLS.Version)),
-				CWE:         "CWE-326",
-				Solution: `TLS GÜVENLİK YAPΙLANDIRMASI:
-
-🔒 TLS 1.2+ ZORUNLU KILIN:
-
-Apache:
-SSLProtocol -all +TLSv1.2 +TLSv1.3
-
-Nginx:
-ssl_protocols TLSv1.2 TLSv1.3;
-
-Cloudflare:
-Minimum TLS Version: 1.2
-
-Node.js:
-const options = {
-    secureProtocol: 'TLSv1_2_method',
-    ciphers: 'ECDHE-RSA-AES128-GCM-SHA256:...'
-};`,
-				References: []string{
-					"https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning",
-					"https://wiki.mozilla.org/Security/Server_Side_TLS",
-				},
-			})
-		}
-
-		// Weak cipher kontrolü
-		if v.isWeakCipher(resp.TLS.CipherSuite) {
-			v.addFinding(Finding{
-				Type:        "Weak SSL Cipher",
-				URL:         targetURL,
-				Risk:        "MEDIUM",
-				CVSS:        4.8,
-				Description: "Zayıf SSL cipher suite kullanılıyor",
-				CWE:         "CWE-327",
-				Solution: `GÜVENLİ CİPHER SUITE'LERİ:
-
-🔐 ÖNERİLEN YAPΙLANDIRMA:
-
-Apache:
-SSLCipherSuite ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
-
-Nginx:
-ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;`,
-				References: []string{
-					"https://wiki.mozilla.org/Security/Server_Side_TLS",
-				},
-			})
-		}
-	}
+	rateLimiter := rate.NewLimiter(rate.Limit(config.Scan.RateLimit), config.Scan.RateLimit)
+	
+	return &Scanner{
+		client:      client,
+		config:      config,
+		options:     options,
+		findings:    make([]Finding, 0),
+		rateLimiter: rateLimiter,
+		errors:      make([]string, 0),
+		stats: struct {
+			requestCount int
+			startTime    time.Time
+		}{
+			requestCount: 0,
+			startTime:    time.Now(),
+		},
+	}, nil
 }
 
-func (v *VulScan) scanCSRF(targetURL string) {
-	if v.verbose {
-		fmt.Printf("[*] CSRF koruması taraması başlatılıyor: %s\n", targetURL)
+// Make HTTP request with rate limiting and error handling
+func (s *Scanner) makeRequest(ctx context.Context, method, url string, body io.Reader, headers map[string]string) (*http.Response, error) {
+	// Rate limiting
+	if err := s.rateLimiter.Wait(ctx); err != nil {
+		return nil, err
 	}
 	
-	resp, err := v.makeRequest("GET", targetURL, "", nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	bodyStr := string(body)
-
-	formRegex := regexp.MustCompile(`(?i)<form[^>]*>`)
-	if !formRegex.MatchString(bodyStr) {
-		return
-	}
-
-	csrfPatterns := []string{
-		`(?i)name=["\']?(_token|csrf_token|authenticity_token)["\']?`,
-		`(?i)name=["\']?_csrf["\']?`,
-		`(?i)<input[^>]*hidden[^>]*token`,
-		`(?i)X-CSRF-TOKEN`,
-	}
-
-	hasCSRFToken := false
-	for _, pattern := range csrfPatterns {
-		matched, _ := regexp.MatchString(pattern, bodyStr)
-		if matched {
-			hasCSRFToken = true
-			break
-		}
-	}
-
-	if !hasCSRFToken {
-		v.addFinding(Finding{
-			Type:        "Cross-Site Request Forgery (CSRF)",
-			URL:         targetURL,
-			Parameter:   "CSRF Token",
-			Risk:        "MEDIUM",
-			CVSS:        6.8,
-			Description: "CSRF koruması eksik. Saldırgan kullanıcı adına yetkisiz işlem yapabilir.",
-			CWE:         "CWE-352",
-			Solution: `CSRF KORUMA STRATEJİSİ:
-
-🛡️ TOKEN TABANLI KORUMA:
-
-PHP:
-session_start();
-// Token üret
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
-
-// Form'da token
-<input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-
-// Token doğrula
-if (!hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
-    die('CSRF token hatası');
-}
-
-Express.js:
-const csrf = require('csurf');
-app.use(csrf({ cookie: true }));
-
-app.get('/form', (req, res) => {
-    res.render('form', { csrfToken: req.csrfToken() });
-});
-
-React:
-// Meta tag'den token al
-const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-
-fetch('/api/data', {
-    method: 'POST',
-    headers: {
-        'X-CSRF-TOKEN': csrfToken,
-        'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(data)
-});
-
-🍪 SAMESITE COOKIE KORUMA:
-Set-Cookie: sessionid=abc123; SameSite=Strict; Secure; HttpOnly
-
-🔍 REFERRER KONTROLÜ:
-if (parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST) !== $_SERVER['HTTP_HOST']) {
-    die('Geçersiz referrer');
-}`,
-			References: []string{
-				"https://owasp.org/www-community/attacks/csrf",
-				"https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
-			},
-		})
-	}
-}
-
-func (v *VulScan) scanCookies(targetURL string) {
-	if v.verbose {
-		fmt.Printf("[*] Cookie güvenlik taraması başlatılıyor: %s\n", targetURL)
+		return nil, err
 	}
 	
-	resp, err := v.makeRequest("GET", targetURL, "", nil)
+	// Set default headers
+	req.Header.Set("User-Agent", s.config.Scan.UserAgent)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	req.Header.Set("Connection", "close")
+	
+	// Add custom headers
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	
+	s.mutex.Lock()
+	s.stats.requestCount++
+	s.mutex.Unlock()
+	
+	start := time.Now()
+	resp, err := s.client.Do(req)
 	if err != nil {
-		return
+		return nil, err
 	}
-	defer resp.Body.Close()
-
-	cookies := resp.Cookies()
-	if len(cookies) == 0 {
-		return
+	
+	if s.options.Verbose {
+		fmt.Printf("[REQUEST] %s %s - %s (%.2fms)\n", 
+			method, url, resp.Status, float64(time.Since(start).Nanoseconds())/1000000)
 	}
-
-	for _, cookie := range cookies {
-		issues := []string{}
-		
-		if !cookie.Secure && strings.HasPrefix(targetURL, "https://") {
-			issues = append(issues, "Secure flag eksik")
-		}
-		
-		if !cookie.HttpOnly {
-			issues = append(issues, "HttpOnly flag eksik")
-		}
-		
-		if cookie.SameSite == 0 {
-			issues = append(issues, "SameSite attribute eksik")
-		}
-
-		if len(issues) > 0 {
-			v.addFinding(Finding{
-				Type:        "Insecure Cookie Configuration",
-				URL:         targetURL,
-				Parameter:   cookie.Name,
-				Response:    fmt.Sprintf("Cookie: %s=%s", cookie.Name, cookie.Value[:min(50, len(cookie.Value))]),
-				Risk:        "MEDIUM",
-				CVSS:        4.2,
-				Description: fmt.Sprintf("Cookie güvenlik sorunları: %s", strings.Join(issues, ", ")),
-				CWE:         "CWE-614",
-				Solution: `COOKIE GÜVENLİK YAPΙLANDIRMASI:
-
-🍪 GÜVENLİ COOKIE AYARLARI:
-
-PHP:
-setcookie('session_id', $value, [
-    'expires' => time() + 3600,
-    'path' => '/',
-    'domain' => 'example.com', 
-    'secure' => true,        // HTTPS için
-    'httponly' => true,      // XSS koruması
-    'samesite' => 'Strict'   // CSRF koruması
-]);
-
-Express.js:
-app.use(session({
-    cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'strict',
-        maxAge: 3600000
-    }
-}));
-
-ASP.NET:
-<system.web>
-    <httpCookies requireSSL="true" httpOnlyCookies="true" sameSite="Strict" />
-</system.web>
-
-Django:
-SESSION_COOKIE_SECURE = True
-SESSION_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SECURE = True
-CSRF_COOKIE_HTTPONLY = True
-
-🛡️ COOKIE POLİTİKASI:
-- Hassas bilgileri cookie'de saklamayın
-- Kısa süre geçerlilik ayarlayın
-- Domain ve Path'i sınırlandırın`,
-				References: []string{
-					"https://owasp.org/www-community/controls/SecureFlag",
-					"https://owasp.org/www-community/HttpOnly",
-					"https://web.dev/samesite-cookies-explained/",
-				},
-			})
-		}
-	}
+	
+	return resp, nil
 }
 
-func (v *VulScan) scanOpenRedirect(targetURL string, params map[string]string) {
-	if v.verbose {
-		fmt.Printf("[*] Open Redirect taraması başlatılıyor: %s\n", targetURL)
-	}
-
-	redirectPayloads := []string{
-		"http://evil.com",
-		"https://attacker.com",
-		"//evil.com",
-		"javascript:alert('redirect')",
-		"data:text/html,<script>alert('redirect')</script>",
-	}
-
+// Test for SQL Injection vulnerabilities
+func (s *Scanner) testSQLInjection(ctx context.Context, baseURL string, params url.Values) {
 	for param := range params {
-		for _, payload := range redirectPayloads {
-			testParams := make(map[string]string)
-			for k, val := range params {
-				testParams[k] = val
+		for _, payload := range payloads[SQLInjection] {
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
-			testParams[param] = payload
-
-			getURL := targetURL + "?" + encodeParams(testParams)
 			
-			// Redirect'leri takip etme
-			client := &http.Client{
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-				Timeout: 10 * time.Second,
+			testParams := make(url.Values)
+			for k, v := range params {
+				testParams[k] = v
 			}
-
-			resp, err := client.Get(getURL)
+			testParams.Set(param, payload)
+			
+			testURL := baseURL + "?" + testParams.Encode()
+			
+			resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
 			if err != nil {
+				s.addError(fmt.Sprintf("SQL Injection test failed for %s: %v", testURL, err))
 				continue
 			}
-			resp.Body.Close()
-
-			if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-				location := resp.Header.Get("Location")
-				if strings.Contains(location, payload) || strings.Contains(location, "evil.com") {
-					v.addFinding(Finding{
-						Type:        "Open Redirect",
-						URL:         getURL,
+			defer resp.Body.Close()
+			
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+				continue
+			}
+			
+			bodyStr := string(body)
+			
+			// Check for SQL error patterns
+			sqlErrors := []string{
+				"mysql_fetch_array",
+				"ORA-[0-9]+",
+				"PostgreSQL query failed",
+				"Warning: mysql_",
+				"valid MySQL result",
+				"MySqlClient",
+				"SQL syntax.*MySQL",
+				"Warning: mysql_fetch_array",
+				"Warning: mysql_num_rows",
+				"MySQL Error",
+				"Error Occurred While Processing Request",
+				"Microsoft OLE DB Provider for ODBC Drivers",
+				"Microsoft JET Database Engine",
+				"Error Occurred While Processing Request",
+				"Server Error in '/' Application",
+				"Microsoft OLE DB Provider for SQL Server",
+				"Unclosed quotation mark after the character string",
+				"Microsoft VBScript runtime error",
+			}
+			
+			for _, errorPattern := range sqlErrors {
+				if matched, _ := regexp.MatchString("(?i)"+errorPattern, bodyStr); matched {
+					finding := Finding{
+						ID:          fmt.Sprintf("sqli_%s_%d", param, time.Now().Unix()),
+						Type:        SQLInjection,
+						Severity:    s.calculateRiskLevel(SQLInjection),
+						CVSS:        cvssScores[SQLInjection],
+						CWE:         cweMapping[SQLInjection],
+						Title:       "SQL Injection Vulnerability",
+						Description: fmt.Sprintf("SQL injection vulnerability detected in parameter '%s'", param),
+						URL:         testURL,
 						Parameter:   param,
 						Payload:     payload,
-						Response:    fmt.Sprintf("Location: %s", location),
-						Risk:        "MEDIUM",
-						CVSS:        5.4,
-						Description: "Açık yönlendirme açığı tespit edildi. Saldırgan kullanıcıları zararlı sitelere yönlendirebilir.",
-						CWE:         "CWE-601",
-						Solution: `OPEN REDIRECT KORUNMASI:
-
-🔒 URL DOĞRULAMA:
-
-PHP:
-function safe_redirect($url) {
-    // Whitelist yaklaşımı
-    $allowed_domains = ['example.com', 'subdomain.example.com'];
-    $parsed = parse_url($url);
-    
-    if (!in_array($parsed['host'], $allowed_domains)) {
-        header('Location: /');
-        exit();
-    }
-    
-    header('Location: ' . $url);
-    exit();
-}
-
-Python (Django):
-from django.shortcuts import redirect
-from django.urls import is_valid_path
-from urllib.parse import urlparse
-
-def safe_redirect_view(request):
-    next_url = request.GET.get('next', '/')
-    
-    # Relative URL kontrolü
-    if next_url.startswith('/') and not next_url.startswith('//'):
-        if is_valid_path(next_url):
-            return redirect(next_url)
-    
-    # Varsayılan güvenli yönlendirme
-    return redirect('/')
-
-JavaScript:
-function validateRedirect(url) {
-    try {
-        const urlObj = new URL(url, window.location.origin);
-        const allowedHosts = ['example.com', 'subdomain.example.com'];
-        
-        return allowedHosts.includes(urlObj.hostname);
-    } catch {
-        return false;
-    }
-}`,
+						Evidence:    errorPattern,
+						Solution:    "Use parameterized queries or prepared statements. Input validation and sanitization.",
 						References: []string{
-							"https://owasp.org/www-community/attacks/Unvalidated_Redirects_and_Forwards",
-							"https://cwe.mitre.org/data/definitions/601.html",
+							"https://owasp.org/www-community/attacks/SQL_Injection",
+							"https://cwe.mitre.org/data/definitions/89.html",
 						},
-					})
-					if v.verbose {
-						fmt.Printf("[!] Open Redirect bulundu: %s -> %s\n", getURL, location)
+						Confidence: 90,
+						Timestamp:  time.Now(),
+						RequestInfo: RequestInfo{
+							Method:    "GET",
+							Headers:   make(map[string]string),
+							UserAgent: s.config.Scan.UserAgent,
+						},
+						ResponseInfo: ResponseInfo{
+							StatusCode: resp.StatusCode,
+							Headers:    make(map[string]string),
+							Body:       s.truncateString(bodyStr, 1000),
+							Size:       len(body),
+							Time:       0, // Will be set properly in actual implementation
+						},
 					}
+					
+					s.addFinding(finding)
+					break
 				}
 			}
 		}
 	}
 }
 
-// Yardımcı fonksiyonlar
-func (v *VulScan) calculateCVSS(vulnType string) float64 {
-	cvssScores := map[string]float64{
-		"SQL_INJECTION":       9.1,
-		"BLIND_SQL_INJECTION": 8.5,
-		"XSS":                 6.1,
-		"LFI":                 8.7,
-		"CSRF":                6.8,
-		"OPEN_REDIRECT":       5.4,
-	}
-	
-	if score, exists := cvssScores[vulnType]; exists {
-		return score
-	}
-	return 0.0
-}
-
-func (v *VulScan) getRiskLevel(cvss float64) string {
-	if cvss >= 9.0 {
-		return "CRITICAL"
-	} else if cvss >= 7.0 {
-		return "HIGH"
-	} else if cvss >= 4.0 {
-		return "MEDIUM"
-	}
-	return "LOW"
-}
-
-func (v *VulScan) detectXSSContext(body, payload string) bool {
-	// Daha gelişmiş XSS context detection
-	contexts := []string{
-		`<script[^>]*>.*` + regexp.QuoteMeta(payload),
-		`on\w+\s*=\s*["'].*` + regexp.QuoteMeta(payload),
-		`javascript:.*` + regexp.QuoteMeta(payload),
-	}
-	
-	for _, context := range contexts {
-		matched, _ := regexp.MatchString("(?i)"+context, body)
-		if matched {
-			return true
+// Test for XSS vulnerabilities
+func (s *Scanner) testXSS(ctx context.Context, baseURL string, params url.Values) {
+	for param := range params {
+		for _, payload := range payloads[XSS] {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			
+			testParams := make(url.Values)
+			for k, v := range params {
+				testParams[k] = v
+			}
+			testParams.Set(param, payload)
+			
+			testURL := baseURL + "?" + testParams.Encode()
+			
+			resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
+			if err != nil {
+				s.addError(fmt.Sprintf("XSS test failed for %s: %v", testURL, err))
+				continue
+			}
+			defer resp.Body.Close()
+			
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+				continue
+			}
+			
+			bodyStr := string(body)
+			
+			// Check if payload is reflected in response
+			if strings.Contains(bodyStr, payload) || strings.Contains(bodyStr, url.QueryEscape(payload)) {
+				finding := Finding{
+					ID:          fmt.Sprintf("xss_%s_%d", param, time.Now().Unix()),
+					Type:        XSS,
+					Severity:    s.calculateRiskLevel(XSS),
+					CVSS:        cvssScores[XSS],
+					CWE:         cweMapping[XSS],
+					Title:       "Cross-Site Scripting (XSS) Vulnerability",
+					Description: fmt.Sprintf("XSS vulnerability detected in parameter '%s'", param),
+					URL:         testURL,
+					Parameter:   param,
+					Payload:     payload,
+					Evidence:    "Payload reflected in response",
+					Solution:    "Implement proper input validation and output encoding. Use Content Security Policy (CSP).",
+					References: []string{
+						"https://owasp.org/www-community/attacks/xss/",
+						"https://cwe.mitre.org/data/definitions/79.html",
+					},
+					Confidence: 85,
+					Timestamp:  time.Now(),
+					RequestInfo: RequestInfo{
+						Method:    "GET",
+						Headers:   make(map[string]string),
+						UserAgent: s.config.Scan.UserAgent,
+					},
+					ResponseInfo: ResponseInfo{
+						StatusCode: resp.StatusCode,
+						Headers:    make(map[string]string),
+						Body:       s.truncateString(bodyStr, 1000),
+						Size:       len(body),
+						Time:       0,
+					},
+				}
+				
+				s.addFinding(finding)
+				break
+			}
 		}
 	}
-	return false
 }
 
-func getTLSVersion(version uint16) string {
-	versions := map[uint16]string{
-		tls.VersionTLS10: "TLS 1.0",
-		tls.VersionTLS11: "TLS 1.1", 
-		tls.VersionTLS12: "TLS 1.2",
-		tls.VersionTLS13: "TLS 1.3",
+// Test for Directory Traversal vulnerabilities
+func (s *Scanner) testDirectoryTraversal(ctx context.Context, baseURL string, params url.Values) {
+	for param := range params {
+		for _, payload := range payloads[DirectoryTraversal] {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			
+			testParams := make(url.Values)
+			for k, v := range params {
+				testParams[k] = v
+			}
+			testParams.Set(param, payload)
+			
+			testURL := baseURL + "?" + testParams.Encode()
+			
+			resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
+			if err != nil {
+				s.addError(fmt.Sprintf("Directory traversal test failed for %s: %v", testURL, err))
+				continue
+			}
+			defer resp.Body.Close()
+			
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+				continue
+			}
+			
+			bodyStr := string(body)
+			
+			// Check for common file content patterns
+			patterns := []string{
+				"root:.*:0:0:",        // /etc/passwd
+				"\\[boot loader\\]",   // Windows boot.ini
+				"127\\.0\\.0\\.1",     // hosts file
+				"localhost",           // hosts file
+				"# This file",         // Common comment in config files
+			}
+			
+			for _, pattern := range patterns {
+				if matched, _ := regexp.MatchString("(?i)"+pattern, bodyStr); matched {
+					finding := Finding{
+						ID:          fmt.Sprintf("lfi_%s_%d", param, time.Now().Unix()),
+						Type:        DirectoryTraversal,
+						Severity:    s.calculateRiskLevel(DirectoryTraversal),
+						CVSS:        cvssScores[DirectoryTraversal],
+						CWE:         cweMapping[DirectoryTraversal],
+						Title:       "Directory Traversal / Local File Inclusion",
+						Description: fmt.Sprintf("Directory traversal vulnerability detected in parameter '%s'", param),
+						URL:         testURL,
+						Parameter:   param,
+						Payload:     payload,
+						Evidence:    fmt.Sprintf("Pattern matched: %s", pattern),
+						Solution:    "Implement proper input validation and restrict file access. Use whitelist approach.",
+						References: []string{
+							"https://owasp.org/www-community/attacks/Path_Traversal",
+							"https://cwe.mitre.org/data/definitions/22.html",
+						},
+						Confidence: 95,
+						Timestamp:  time.Now(),
+						RequestInfo: RequestInfo{
+							Method:    "GET",
+							Headers:   make(map[string]string),
+							UserAgent: s.config.Scan.UserAgent,
+						},
+						ResponseInfo: ResponseInfo{
+							StatusCode: resp.StatusCode,
+							Headers:    make(map[string]string),
+							Body:       s.truncateString(bodyStr, 1000),
+							Size:       len(body),
+							Time:       0,
+						},
+					}
+					
+					s.addFinding(finding)
+					break
+				}
+			}
+		}
+	}
+}
+
+// Test security headers
+func (s *Scanner) testSecurityHeaders(ctx context.Context, targetURL string) {
+	resp, err := s.makeRequest(ctx, "GET", targetURL, nil, nil)
+	if err != nil {
+		s.addError(fmt.Sprintf("Security headers test failed for %s: %v", targetURL, err))
+		return
+	}
+	defer resp.Body.Close()
+	
+	requiredHeaders := map[string]string{
+		"X-Frame-Options":           "Clickjacking protection",
+		"X-Content-Type-Options":    "MIME sniffing protection",
+		"X-XSS-Protection":          "XSS filter protection",
+		"Strict-Transport-Security": "HTTPS enforcement",
+		"Content-Security-Policy":   "Content injection protection",
+		"Referrer-Policy":           "Referrer information control",
 	}
 	
-	if v, exists := versions[version]; exists {
-		return v
+	for header, description := range requiredHeaders {
+		if resp.Header.Get(header) == "" {
+			finding := Finding{
+				ID:          fmt.Sprintf("header_%s_%d", strings.ToLower(header), time.Now().Unix()),
+				Type:        SecurityHeaders,
+				Severity:    s.calculateRiskLevel(SecurityHeaders),
+				CVSS:        cvssScores[SecurityHeaders],
+				CWE:         cweMapping[SecurityHeaders],
+				Title:       fmt.Sprintf("Missing Security Header: %s", header),
+				Description: fmt.Sprintf("Missing %s header - %s", header, description),
+				URL:         targetURL,
+				Evidence:    fmt.Sprintf("Header '%s' not present in response", header),
+				Solution:    fmt.Sprintf("Add '%s' header to all responses", header),
+				References: []string{
+					"https://owasp.org/www-community/Security_Headers",
+					"https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers",
+				},
+				Confidence: 100,
+				Timestamp:  time.Now(),
+				RequestInfo: RequestInfo{
+					Method:    "GET",
+					Headers:   make(map[string]string),
+					UserAgent: s.config.Scan.UserAgent,
+				},
+				ResponseInfo: ResponseInfo{
+					StatusCode: resp.StatusCode,
+					Headers:    make(map[string]string),
+					Size:       0,
+					Time:       0,
+				},
+			}
+			
+			s.addFinding(finding)
+		}
 	}
-	return "Bilinmeyen"
 }
 
-func (v *VulScan) isWeakCipher(suite uint16) bool {
+// Calculate risk level based on CVSS score
+func (s *Scanner) calculateRiskLevel(vulnType VulnType) RiskLevel {
+	score := cvssScores[vulnType]
+	
+	switch {
+	case score >= 9.0:
+		return RiskCritical
+	case score >= 7.0:
+		return RiskHigh
+	case score >= 4.0:
+		return RiskMedium
+	case score >= 0.1:
+		return RiskLow
+	default:
+		return RiskInfo
+	}
+}
+
+// Add finding to results
+func (s *Scanner) addFinding(finding Finding) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.findings = append(s.findings, finding)
+	
+	if s.options.Verbose {
+		fmt.Printf("[FOUND] %s - %s (%s) in %s\n", 
+			finding.Severity, finding.Title, finding.Type, finding.URL)
+	}
+}
+
+// Add error to error list
+func (s *Scanner) addError(err string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.errors = append(s.errors, err)
+	
+	if s.options.Verbose {
+		fmt.Printf("[ERROR] %s\n", err)
+	}
+}
+
+// Truncate string to specified length
+func (s *Scanner) truncateString(str string, maxLen int) string {
+	if len(str) <= maxLen {
+		return str
+	}
+	return str[:maxLen] + "..."
+}
+
+	// Main scanning function
+func (s *Scanner) Scan(ctx context.Context, targetURL string) (*ScanResult, error) {
+	s.stats.startTime = time.Now()
+	
+	if s.options.Verbose {
+		fmt.Printf("Starting scan of: %s\n", targetURL)
+	}
+	
+	// Parse URL and extract parameters
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %v", err)
+	}
+	
+	params := parsedURL.Query()
+	baseURL := fmt.Sprintf("%s://%s%s", parsedURL.Scheme, parsedURL.Host, parsedURL.Path)
+	
+	// Create worker pool for parallel scanning
+	semaphore := make(chan struct{}, s.config.Scan.Threads)
+	var wg sync.WaitGroup
+	
+	// Test security headers
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testSecurityHeaders(ctx, targetURL)
+	}()
+	
+	// Test SSL/TLS configuration
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testSSLConfiguration(ctx, parsedURL.Host)
+	}()
+	
+	// Test cookie security
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testCookieSecurity(ctx, targetURL)
+	}()
+	
+	// Only test injection vulnerabilities if parameters exist
+	if len(params) > 0 {
+		// Test SQL Injection
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			s.testSQLInjection(ctx, baseURL, params)
+		}()
+		
+		// Test XSS
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			s.testXSS(ctx, baseURL, params)
+		}()
+		
+		// Test Directory Traversal
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			s.testDirectoryTraversal(ctx, baseURL, params)
+		}()
+		
+		// Test Command Injection
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			s.testCommandInjection(ctx, baseURL, params)
+		}()
+		
+		// Test Open Redirect
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			s.testOpenRedirect(ctx, baseURL, params)
+		}()
+		
+		// Test CSRF
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			s.testCSRF(ctx, targetURL)
+		}()
+	}
+	
+	// Wait for all tests to complete
+	wg.Wait()
+	
+	// Generate scan result
+	duration := time.Since(s.stats.startTime)
+	result := &ScanResult{}
+	
+	// Fill scan info
+	result.ScanInfo.Target = targetURL
+	result.ScanInfo.Timestamp = s.stats.startTime
+	result.ScanInfo.Version = Version
+	result.ScanInfo.Duration = duration.String()
+	result.ScanInfo.Options = *s.options
+	
+	// Fill summary
+	result.Summary.TotalFindings = len(s.findings)
+	result.Summary.URLs = 1
+	result.Summary.Requests = s.stats.requestCount
+	result.Summary.RiskBreakdown = make(map[RiskLevel]int)
+	result.Summary.TypeBreakdown = make(map[VulnType]int)
+	
+	// Calculate breakdowns
+	for _, finding := range s.findings {
+		result.Summary.RiskBreakdown[finding.Severity]++
+		result.Summary.TypeBreakdown[finding.Type]++
+	}
+	
+	// Sort findings by severity
+	sort.Slice(s.findings, func(i, j int) bool {
+		severityOrder := map[RiskLevel]int{
+			RiskCritical: 4, RiskHigh: 3, RiskMedium: 2, RiskLow: 1, RiskInfo: 0,
+		}
+		return severityOrder[s.findings[i].Severity] > severityOrder[s.findings[j].Severity]
+	})
+	
+	result.Findings = s.findings
+	result.Errors = s.errors
+	
+	if s.options.Verbose {
+		fmt.Printf("Scan completed in %s. Found %d vulnerabilities.\n", 
+			duration, len(s.findings))
+	}
+	
+	return result, nil
+}
+
+// Test SSL/TLS configuration
+func (s *Scanner) testSSLConfiguration(ctx context.Context, host string) {
+	if !strings.Contains(host, ":") {
+		host = host + ":443"
+	}
+	
+	// Test TLS connection
+	dialer := &tls.Dialer{
+		Config: &tls.Config{
+			InsecureSkipVerify: false, // We want to check certificate validity
+		},
+	}
+	
+	conn, err := dialer.DialContext(ctx, "tcp", host)
+	if err != nil {
+		// Try with InsecureSkipVerify to get more details
+		dialer.Config.InsecureSkipVerify = true
+		conn, err = dialer.DialContext(ctx, "tcp", host)
+		if err != nil {
+			s.addError(fmt.Sprintf("SSL/TLS test failed for %s: %v", host, err))
+			return
+		}
+	}
+	defer conn.Close()
+	
+	tlsConn := conn.(*tls.Conn)
+	state := tlsConn.ConnectionState()
+	
+	// Check TLS version
+	if state.Version < tls.VersionTLS12 {
+		finding := Finding{
+			ID:          fmt.Sprintf("ssl_version_%d", time.Now().Unix()),
+			Type:        SSLConfiguration,
+			Severity:    RiskHigh,
+			CVSS:        7.4,
+			CWE:         cweMapping[SSLConfiguration],
+			Title:       "Weak TLS Version",
+			Description: fmt.Sprintf("Server supports weak TLS version: %s", tlsVersionString(state.Version)),
+			URL:         fmt.Sprintf("https://%s", host),
+			Evidence:    fmt.Sprintf("TLS version: %s", tlsVersionString(state.Version)),
+			Solution:    "Configure server to support only TLS 1.2 and higher",
+			References: []string{
+				"https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning",
+				"https://cwe.mitre.org/data/definitions/326.html",
+			},
+			Confidence: 100,
+			Timestamp:  time.Now(),
+		}
+		s.addFinding(finding)
+	}
+	
+	// Check cipher suite
+	if state.CipherSuite == 0 || isWeakCipher(state.CipherSuite) {
+		finding := Finding{
+			ID:          fmt.Sprintf("ssl_cipher_%d", time.Now().Unix()),
+			Type:        SSLConfiguration,
+			Severity:    RiskMedium,
+			CVSS:        5.3,
+			CWE:         cweMapping[SSLConfiguration],
+			Title:       "Weak Cipher Suite",
+			Description: "Server uses weak or insecure cipher suite",
+			URL:         fmt.Sprintf("https://%s", host),
+			Evidence:    fmt.Sprintf("Cipher suite: %s", tls.CipherSuiteName(state.CipherSuite)),
+			Solution:    "Configure server to use strong cipher suites only",
+			References: []string{
+				"https://wiki.mozilla.org/Security/Server_Side_TLS",
+			},
+			Confidence: 100,
+			Timestamp:  time.Now(),
+		}
+		s.addFinding(finding)
+	}
+}
+
+// Test cookie security
+func (s *Scanner) testCookieSecurity(ctx context.Context, targetURL string) {
+	resp, err := s.makeRequest(ctx, "GET", targetURL, nil, nil)
+	if err != nil {
+		s.addError(fmt.Sprintf("Cookie security test failed for %s: %v", targetURL, err))
+		return
+	}
+	defer resp.Body.Close()
+	
+	cookies := resp.Cookies()
+	for _, cookie := range cookies {
+		// Check for HttpOnly flag
+		if !cookie.HttpOnly {
+			finding := Finding{
+				ID:          fmt.Sprintf("cookie_httponly_%s_%d", cookie.Name, time.Now().Unix()),
+				Type:        CookieSecurity,
+				Severity:    RiskMedium,
+				CVSS:        4.3,
+				CWE:         cweMapping[CookieSecurity],
+				Title:       "Cookie Missing HttpOnly Flag",
+				Description: fmt.Sprintf("Cookie '%s' is missing HttpOnly flag", cookie.Name),
+				URL:         targetURL,
+				Evidence:    fmt.Sprintf("Cookie: %s", cookie.String()),
+				Solution:    "Set HttpOnly flag on all cookies containing sensitive data",
+				References: []string{
+					"https://owasp.org/www-community/controls/SecureFlag",
+					"https://cwe.mitre.org/data/definitions/614.html",
+				},
+				Confidence: 100,
+				Timestamp:  time.Now(),
+			}
+			s.addFinding(finding)
+		}
+		
+		// Check for Secure flag on HTTPS
+		parsedURL, _ := url.Parse(targetURL)
+		if parsedURL.Scheme == "https" && !cookie.Secure {
+			finding := Finding{
+				ID:          fmt.Sprintf("cookie_secure_%s_%d", cookie.Name, time.Now().Unix()),
+				Type:        CookieSecurity,
+				Severity:    RiskMedium,
+				CVSS:        4.3,
+				CWE:         cweMapping[CookieSecurity],
+				Title:       "Cookie Missing Secure Flag",
+				Description: fmt.Sprintf("Cookie '%s' is missing Secure flag on HTTPS site", cookie.Name),
+				URL:         targetURL,
+				Evidence:    fmt.Sprintf("Cookie: %s", cookie.String()),
+				Solution:    "Set Secure flag on all cookies when using HTTPS",
+				References: []string{
+					"https://owasp.org/www-community/controls/SecureFlag",
+					"https://cwe.mitre.org/data/definitions/614.html",
+				},
+				Confidence: 100,
+				Timestamp:  time.Now(),
+			}
+			s.addFinding(finding)
+		}
+		
+		// Check for SameSite attribute
+		if cookie.SameSite == http.SameSiteDefaultMode {
+			finding := Finding{
+				ID:          fmt.Sprintf("cookie_samesite_%s_%d", cookie.Name, time.Now().Unix()),
+				Type:        CookieSecurity,
+				Severity:    RiskLow,
+				CVSS:        3.1,
+				CWE:         cweMapping[CookieSecurity],
+				Title:       "Cookie Missing SameSite Attribute",
+				Description: fmt.Sprintf("Cookie '%s' is missing SameSite attribute", cookie.Name),
+				URL:         targetURL,
+				Evidence:    fmt.Sprintf("Cookie: %s", cookie.String()),
+				Solution:    "Set SameSite attribute to 'Strict' or 'Lax' as appropriate",
+				References: []string{
+					"https://owasp.org/www-community/SameSite",
+				},
+				Confidence: 90,
+				Timestamp:  time.Now(),
+			}
+			s.addFinding(finding)
+		}
+	}
+}
+
+// Test command injection vulnerabilities
+func (s *Scanner) testCommandInjection(ctx context.Context, baseURL string, params url.Values) {
+	for param := range params {
+		for _, payload := range payloads[CommandInjection] {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			
+			testParams := make(url.Values)
+			for k, v := range params {
+				testParams[k] = v
+			}
+			testParams.Set(param, payload)
+			
+			testURL := baseURL + "?" + testParams.Encode()
+			
+			start := time.Now()
+			resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
+			responseTime := time.Since(start)
+			
+			if err != nil {
+				s.addError(fmt.Sprintf("Command injection test failed for %s: %v", testURL, err))
+				continue
+			}
+			defer resp.Body.Close()
+			
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+				continue
+			}
+			
+			bodyStr := string(body)
+			
+			// Check for command output patterns
+			cmdPatterns := []string{
+				"uid=\\d+\\(.*\\) gid=\\d+\\(.*\\)",  // id command output
+				"root:.*:0:0:",                        // passwd file content
+				"Microsoft Windows",                   // Windows version
+				"Linux version",                       // Linux version
+				"total \\d+",                          // ls -l output
+				"Volume.* Serial Number",              // Windows dir output
+			}
+			
+			// Check for time-based injection (commands that cause delays)
+			timeBasedPayloads := []string{"; sleep 5", "| timeout 5", "& ping -n 5 127.0.0.1"}
+			for _, timePayload := range timeBasedPayloads {
+				if strings.Contains(payload, "sleep") || strings.Contains(payload, "ping") {
+					if responseTime > 4*time.Second {
+						finding := Finding{
+							ID:          fmt.Sprintf("cmdi_time_%s_%d", param, time.Now().Unix()),
+							Type:        CommandInjection,
+							Severity:    s.calculateRiskLevel(CommandInjection),
+							CVSS:        cvssScores[CommandInjection],
+							CWE:         cweMapping[CommandInjection],
+							Title:       "Time-based Command Injection",
+							Description: fmt.Sprintf("Time-based command injection detected in parameter '%s'", param),
+							URL:         testURL,
+							Parameter:   param,
+							Payload:     payload,
+							Evidence:    fmt.Sprintf("Response time: %.2f seconds", responseTime.Seconds()),
+							Solution:    "Implement proper input validation and avoid system calls with user input",
+							References: []string{
+								"https://owasp.org/www-community/attacks/Command_Injection",
+								"https://cwe.mitre.org/data/definitions/78.html",
+							},
+							Confidence: 80,
+							Timestamp:  time.Now(),
+						}
+						s.addFinding(finding)
+						break
+					}
+				}
+			}
+			
+			// Check for output patterns
+			for _, pattern := range cmdPatterns {
+				if matched, _ := regexp.MatchString("(?i)"+pattern, bodyStr); matched {
+					finding := Finding{
+						ID:          fmt.Sprintf("cmdi_%s_%d", param, time.Now().Unix()),
+						Type:        CommandInjection,
+						Severity:    s.calculateRiskLevel(CommandInjection),
+						CVSS:        cvssScores[CommandInjection],
+						CWE:         cweMapping[CommandInjection],
+						Title:       "Command Injection Vulnerability",
+						Description: fmt.Sprintf("Command injection vulnerability detected in parameter '%s'", param),
+						URL:         testURL,
+						Parameter:   param,
+						Payload:     payload,
+						Evidence:    fmt.Sprintf("Pattern matched: %s", pattern),
+						Solution:    "Implement proper input validation and avoid system calls with user input",
+						References: []string{
+							"https://owasp.org/www-community/attacks/Command_Injection",
+							"https://cwe.mitre.org/data/definitions/78.html",
+						},
+						Confidence: 90,
+						Timestamp:  time.Now(),
+					}
+					s.addFinding(finding)
+					break
+				}
+			}
+		}
+	}
+}
+
+// Test open redirect vulnerabilities
+func (s *Scanner) testOpenRedirect(ctx context.Context, baseURL string, params url.Values) {
+	redirectPayloads := []string{
+		"http://evil.com",
+		"https://evil.com",
+		"//evil.com",
+		"javascript:alert('redirect')",
+		"/\\evil.com",
+		"http://google.com",
+		"https://example.com",
+	}
+	
+	for param := range params {
+		for _, payload := range redirectPayloads {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			
+			testParams := make(url.Values)
+			for k, v := range params {
+				testParams[k] = v
+			}
+			testParams.Set(param, payload)
+			
+			testURL := baseURL + "?" + testParams.Encode()
+			
+			resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
+			if err != nil {
+				s.addError(fmt.Sprintf("Open redirect test failed for %s: %v", testURL, err))
+				continue
+			}
+			defer resp.Body.Close()
+			
+			// Check for redirect responses
+			if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+				location := resp.Header.Get("Location")
+				if location != "" && (strings.Contains(location, payload) || strings.Contains(location, "evil.com")) {
+					finding := Finding{
+						ID:          fmt.Sprintf("redirect_%s_%d", param, time.Now().Unix()),
+						Type:        OpenRedirect,
+						Severity:    s.calculateRiskLevel(OpenRedirect),
+						CVSS:        cvssScores[OpenRedirect],
+						CWE:         cweMapping[OpenRedirect],
+						Title:       "Open Redirect Vulnerability",
+						Description: fmt.Sprintf("Open redirect vulnerability detected in parameter '%s'", param),
+						URL:         testURL,
+						Parameter:   param,
+						Payload:     payload,
+						Evidence:    fmt.Sprintf("Redirect location: %s", location),
+						Solution:    "Validate redirect URLs against a whitelist of allowed destinations",
+						References: []string{
+							"https://owasp.org/www-community/attacks/Unvalidated_Redirects_and_Forwards_Cheat_Sheet",
+							"https://cwe.mitre.org/data/definitions/601.html",
+						},
+						Confidence: 95,
+						Timestamp:  time.Now(),
+					}
+					s.addFinding(finding)
+					break
+				}
+			}
+		}
+	}
+}
+
+// Test CSRF vulnerability
+func (s *Scanner) testCSRF(ctx context.Context, targetURL string) {
+	resp, err := s.makeRequest(ctx, "GET", targetURL, nil, nil)
+	if err != nil {
+		s.addError(fmt.Sprintf("CSRF test failed for %s: %v", targetURL, err))
+		return
+	}
+	defer resp.Body.Close()
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+		return
+	}
+	
+	bodyStr := string(body)
+	
+	// Check for forms without CSRF tokens
+	formRegex := regexp.MustCompile(`(?i)<form[^>]*>`)
+	csrfTokenRegex := regexp.MustCompile(`(?i)(csrf|token|_token)`)
+	
+	if formRegex.MatchString(bodyStr) && !csrfTokenRegex.MatchString(bodyStr) {
+		finding := Finding{
+			ID:          fmt.Sprintf("csrf_%d", time.Now().Unix()),
+			Type:        CSRF,
+			Severity:    s.calculateRiskLevel(CSRF),
+			CVSS:        cvssScores[CSRF],
+			CWE:         cweMapping[CSRF],
+			Title:       "Missing CSRF Protection",
+			Description: "Forms found without CSRF token protection",
+			URL:         targetURL,
+			Evidence:    "HTML forms detected without CSRF tokens",
+			Solution:    "Implement CSRF tokens in all forms and validate them server-side",
+			References: []string{
+				"https://owasp.org/www-community/attacks/csrf",
+				"https://cwe.mitre.org/data/definitions/352.html",
+			},
+			Confidence: 70,
+			Timestamp:  time.Now(),
+		}
+		s.addFinding(finding)
+	}
+}
+
+// Helper functions
+func tlsVersionString(version uint16) string {
+	switch version {
+	case tls.VersionSSL30:
+		return "SSL 3.0"
+	case tls.VersionTLS10:
+		return "TLS 1.0"
+	case tls.VersionTLS11:
+		return "TLS 1.1"
+	case tls.VersionTLS12:
+		return "TLS 1.2"
+	case tls.VersionTLS13:
+		return "TLS 1.3"
+	default:
+		return "Unknown"
+	}
+}
+
+func isWeakCipher(cipherSuite uint16) bool {
 	weakCiphers := []uint16{
 		tls.TLS_RSA_WITH_RC4_128_SHA,
 		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-		tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+		tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
+		tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
 	}
 	
 	for _, weak := range weakCiphers {
-		if suite == weak {
+		if cipherSuite == weak {
 			return true
 		}
 	}
 	return false
 }
 
-type HeaderInfo struct {
-	Description string
-	Solution    string
-	CVSS        float64
-}
-
-func getDefaultHeaderValue(header string) string {
-	defaults := map[string]string{
-		"X-Frame-Options":           "DENY",
-		"X-XSS-Protection":          "1; mode=block",
-		"X-Content-Type-Options":    "nosniff",
-		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-		"Content-Security-Policy":   "default-src 'self'",
-		"Referrer-Policy":           "strict-origin-when-cross-origin",
-		"Permissions-Policy":        "geolocation=(), microphone=(), camera=()",
-	}
-	return defaults[header]
-}
-
-func (v *VulScan) detectSQLError(body string) bool {
-	sqlErrors := []string{
-		"mysql_fetch_array", "ORA-[0-9]+", "Microsoft.*ODBC.*SQL",
-		"PostgreSQL.*ERROR", "Warning.*mysql_", "valid MySQL result",
-		"MySQLSyntaxErrorException", "sqlite3.OperationalError", "SQLiteException",
-		"SQL syntax.*MySQL", "Warning.*sqlite_", "SQLite error",
-		"sqlite3.DatabaseError", "Unclosed quotation mark after", "Microsoft Access Driver",
-		"OLE DB.*error", "Microsoft JET Database", "ADODB.Field.*error",
-	}
-
-	for _, pattern := range sqlErrors {
-		matched, _ := regexp.MatchString("(?i)"+pattern, body)
-		if matched {
-			return true
-		}
-	}
-	return false
-}
-
-func (v *VulScan) detectLFI(body string) bool {
-	patterns := []string{
-		"root:.*:0:0:", "\\[drivers\\]", "\\[boot loader\\]", "daemon:.*:1:1:",
-		"microsoft windows", "\\[operating systems\\]", "\\[fonts\\]",
-		"\\[extensions\\]", "\\[MCI Extensions\\]", "ECHO is on\\.",
-		"Volume.* Serial Number", "Directory of C:", "boot\\.ini",
-		"config\\.sys", "autoexec\\.bat",
-	}
-
-	for _, pattern := range patterns {
-		matched, _ := regexp.MatchString("(?i)"+pattern, body)
-		if matched {
-			return true
-		}
-	}
-	return false
-}
-
-func encodeParams(params map[string]string) string {
-	values := url.Values{}
-	for key, value := range params {
-		values.Add(key, value)
-	}
-	return values.Encode()
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func (v *VulScan) printResults() {
-	fmt.Println("\n" + strings.Repeat("═", 100))
-	fmt.Println("🛡️  VULSCAN v3.0 - KAPSAMLI GÜVENLİK TARAMA RAPORU")
-	fmt.Println(strings.Repeat("═", 100))
-	
-	if len(v.findings) == 0 {
-		fmt.Println("✅ Tarama tamamlandı - Açık güvenlik açığı tespit edilmedi!")
-		fmt.Println("🎉 Tebrikler! Hedef sistem güvenlik testlerinden başarıyla geçti.")
-		return
-	}
-
-	riskCounts := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-	totalCVSS := 0.0
-	
-	for i, finding := range v.findings {
-		riskCounts[finding.Risk]++
-		totalCVSS += finding.CVSS
-		
-		fmt.Printf("\n🚨 GÜVENLIK AÇIĞI #%d\n", i+1)
-		fmt.Printf("═══════════════════════════════════════════════════════════════════════════════════════════════════\n")
-		
-		// Risk rengi ile göster
-		riskEmoji := map[string]string{
-			"CRITICAL": "🔴",
-			"HIGH":     "🟠", 
-			"MEDIUM":   "🟡",
-			"LOW":      "🟢",
-		}
-		
-		fmt.Printf("📍 TİP: %s\n", finding.Type)
-		fmt.Printf("⚠️  RİSK SEVİYESİ: %s %s\n", riskEmoji[finding.Risk], finding.Risk)
-		fmt.Printf("📊 CVSS SKORU: %.1f/10\n", finding.CVSS)
-		fmt.Printf("🕒 TESPİT ZAMANI: %s\n", finding.Timestamp.Format("2006-01-02 15:04:05"))
-		
-		if finding.CWE != "" {
-			fmt.Printf("🔍 CWE: %s\n", finding.CWE)
-		}
-		
-		fmt.Printf("🌐 HEDEF URL: %s\n", finding.URL)
-		
-		if finding.Parameter != "" {
-			fmt.Printf("📝 PARAMETRE: %s\n", finding.Parameter)
-		}
-		if finding.Payload != "" {
-			fmt.Printf("💥 PAYLOAD: %s\n", finding.Payload)
-		}
-		if finding.Response != "" {
-			fmt.Printf("📥 YANIT ÖRNEĞİ: %s...\n", finding.Response)
-		}
-		
-		fmt.Printf("\n📋 AÇIKLAMA:\n%s\n", finding.Description)
-		fmt.Printf("\n🛠️  ÇÖZÜM ÖNERİLERİ:\n%s\n", finding.Solution)
-		
-		if len(finding.References) > 0 {
-			fmt.Printf("\n📚 REFERANSLAR:\n")
-			for _, ref := range finding.References {
-				fmt.Printf("   🔗 %s\n", ref)
-			}
-		}
-		
-		fmt.Println(strings.Repeat("─", 100))
-	}
-
-	// Detaylı özet rapor
-	avgCVSS := totalCVSS / float64(len(v.findings))
-	
-	fmt.Printf("\n📊 DETAYLI ÖZET RAPOR\n")
-	fmt.Printf("═══════════════════════════════════════════════════════════════════════════════════════════════════\n")
-	fmt.Printf("🔴 Kritik Risk:     %d açık\n", riskCounts["CRITICAL"]) 
-	fmt.Printf("🟠 Yüksek Risk:     %d açık\n", riskCounts["HIGH"])
-	fmt.Printf("🟡 Orta Risk:       %d açık\n", riskCounts["MEDIUM"])
-	fmt.Printf("🟢 Düşük Risk:      %d açık\n", riskCounts["LOW"])
-	fmt.Printf("📈 Toplam Açık:     %d\n", len(v.findings))
-	fmt.Printf("📊 Ortalama CVSS:   %.1f/10\n", avgCVSS)
-	
-	// Risk değerlendirmesi ve öneriler
-	fmt.Printf("\n💡 RİSK DEĞERLENDİRMESİ VE ÖNCELİKLER\n")
-	fmt.Printf("═══════════════════════════════════════════════════════════════════════════════════════════════════\n")
-	
-	if riskCounts["CRITICAL"] > 0 {
-		fmt.Printf("🚨 ACİL DURUM: %d kritik açık derhal kapatılmalı!\n", riskCounts["CRITICAL"])
-		fmt.Printf("⏰ Maksimum 24 saat içinde düzeltilmesi öneriliyor.\n")
-	}
-	if riskCounts["HIGH"] > 0 {
-		fmt.Printf("⚠️  YÜKSEK ÖNCELİK: %d yüksek riskli açık 1 hafta içinde kapatılmalı.\n", riskCounts["HIGH"])
-	}
-	if riskCounts["MEDIUM"] > 0 {
-		fmt.Printf("🔶 ORTA ÖNCELİK: %d orta riskli açık 1 ay içinde düzeltilmeli.\n", riskCounts["MEDIUM"])
-	}
-	if riskCounts["LOW"] > 0 {
-		fmt.Printf("🔷 DÜŞÜK ÖNCELİK: %d düşük riskli bulgu gelecek güncelleme döneminde düzeltilebilir.\n", riskCounts["LOW"])
-	}
-
-	// Genel güvenlik önerileri
-	fmt.Printf("\n🛡️  GENEL GÜVENLİK ÖNERİLERİ\n")
-	fmt.Printf("═══════════════════════════════════════════════════════════════════════════════════════════════════\n")
-	fmt.Printf("1. 🔄 Düzenli güvenlik taramaları yapın (ayda 1 kez)\n")
-	fmt.Printf("2. 🔐 Güçlü kimlik doğrulama mekanizmaları kullanın\n") 
-	fmt.Printf("3. 🛡️  WAF (Web Application Firewall) kurulumunu değerlendirin\n")
-	fmt.Printf("4. 📊 Güvenlik loglarını izleyin ve analiz edin\n")
-	fmt.Printf("5. 🎓 Geliştirici ekibine güvenlik eğitimleri verin\n")
-	fmt.Printf("6. 🔍 Penetrasyon testlerini profesyonel firmalardan alın\n")
-	
-	fmt.Printf("\n✨ VulScan v3.0 ile tarama tamamlandı!\n")
-}
-
-func (v *VulScan) generateJSONReport() error {
-	if v.outputFile == "" {
-		return nil
-	}
-	
-	report := map[string]interface{}{
-		"scan_info": map[string]interface{}{
-			"target":    v.target,
-			"timestamp": time.Now(),
-			"version":   "VulScan v3.0",
-		},
-		"summary": map[string]interface{}{
-			"total_findings": len(v.findings),
-			"risk_breakdown": v.getRiskBreakdown(),
-			"avg_cvss":       v.getAverageCVSS(),
-		},
-		"findings": v.findings,
-	}
-
-	jsonData, err := json.MarshalIndent(report, "", "  ")
+// Export results to JSON
+func (s *Scanner) ExportJSON(result *ScanResult, filename string) error {
+	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(v.outputFile, jsonData, 0644)
-}
-
-func (v *VulScan) getRiskBreakdown() map[string]int {
-	breakdown := map[string]int{"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-	for _, finding := range v.findings {
-		breakdown[finding.Risk]++
-	}
-	return breakdown
-}
-
-func (v *VulScan) getAverageCVSS() float64 {
-	if len(v.findings) == 0 {
-		return 0.0
+		return fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 	
-	total := 0.0
-	for _, finding := range v.findings {
-		total += finding.CVSS
-	}
-	return total / float64(len(v.findings))
+	return os.WriteFile(filename, data, 0644)
 }
 
-func (v *VulScan) generateHTMLReport() error {
-	htmlContent := `<!DOCTYPE html>
-<html lang="tr">
+// Generate HTML report
+func (s *Scanner) GenerateHTMLReport(result *ScanResult, filename string) error {
+	htmlTemplate := `
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VulScan v3.0 - Güvenlik Raporu</title>
+    <title>VulScan Security Report</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { 
-            background: rgba(255,255,255,0.95);
-            padding: 30px;
-            border-radius: 20px;
-            text-align: center;
-            margin-bottom: 30px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        }
-        .stats { 
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-        }
-        .finding { 
-            background: white;
-            margin: 20px 0;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
-        }
-        .finding-header {
-            padding: 20px;
-            color: white;
-            font-weight: bold;
-        }
-        .critical { background: linear-gradient(45deg, #ff6b6b, #ee5a52); }
-        .high { background: linear-gradient(45deg, #ffa726, #ff9800); }
-        .medium { background: linear-gradient(45deg, #ffee58, #fdd835); color: #333; }
-        .low { background: linear-gradient(45deg, #66bb6a, #4caf50); }
-        .finding-body { padding: 25px; }
-        .solution { 
-            background: #f8f9fa;
-            padding: 20px;
-            margin: 15px 0;
-            border-radius: 10px;
-            border-left: 4px solid #007bff;
-        }
-        .code { 
-            background: #2d3748;
-            color: #e2e8f0;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            white-space: pre-wrap;
-            margin: 10px 0;
-            overflow-x: auto;
-        }
-        .references { margin-top: 15px; }
-        .references a { 
-            display: inline-block;
-            background: #e3f2fd;
-            color: #1976d2;
-            padding: 5px 10px;
-            margin: 5px;
-            border-radius: 15px;
-            text-decoration: none;
-            font-size: 12px;
-        }
-        h1 { color: #2c3e50; margin-bottom: 10px; }
-        h2 { color: #34495e; margin-bottom: 15px; }
-        .meta { color: #7f8c8d; margin-bottom: 15px; }
-        .badge { 
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: bold;
-            margin-right: 10px;
-        }
-        .cvss-badge { background: #17a2b8; color: white; }
-        .cwe-badge { background: #6c757d; color: white; }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .summary-card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+        .risk-critical { border-left: 5px solid #dc3545; }
+        .risk-high { border-left: 5px solid #fd7e14; }
+        .risk-medium { border-left: 5px solid #ffc107; }
+        .risk-low { border-left: 5px solid #28a745; }
+        .risk-info { border-left: 5px solid #17a2b8; }
+        .finding { margin-bottom: 20px; padding: 20px; background: white; border-radius: 8px; border-left: 5px solid #ccc; }
+        .finding h3 { margin: 0 0 10px 0; }
+        .meta { color: #666; font-size: 0.9em; margin: 10px 0; }
+        .payload { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; word-break: break-all; }
+        .solution { background: #d4edda; padding: 15px; border-radius: 4px; margin-top: 10px; border-left: 4px solid #28a745; }
+        .footer { text-align: center; margin-top: 30px; padding: 20px; color: #666; border-top: 1px solid #eee; }
+        .timestamp { color: #666; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🛡️ VulScan v3.0 - Gelişmiş Güvenlik Raporu</h1>
-            <div class="meta">
-                <strong>Hedef:</strong> ` + v.target + `<br>
-                <strong>Tarama Tarihi:</strong> ` + time.Now().Format("2006-01-02 15:04:05") + `<br>
-                <strong>Toplam Bulgu:</strong> ` + strconv.Itoa(len(v.findings)) + `
+            <h1>🔒 VulScan Security Report</h1>
+            <p>Target: <strong>{{.ScanInfo.Target}}</strong></p>
+            <p class="timestamp">Scan completed: {{.ScanInfo.Timestamp.Format "2006-01-02 15:04:05"}} | Duration: {{.ScanInfo.Duration}}</p>
+        </div>
+        
+        <div class="summary">
+            <div class="summary-card">
+                <h3>Total Findings</h3>
+                <h2>{{.Summary.TotalFindings}}</h2>
+            </div>
+            <div class="summary-card risk-critical">
+                <h3>Critical</h3>
+                <h2>{{index .Summary.RiskBreakdown "CRITICAL"}}</h2>
+            </div>
+            <div class="summary-card risk-high">
+                <h3>High</h3>
+                <h2>{{index .Summary.RiskBreakdown "HIGH"}}</h2>
+            </div>
+            <div class="summary-card risk-medium">
+                <h3>Medium</h3>
+                <h2>{{index .Summary.RiskBreakdown "MEDIUM"}}</h2>
+            </div>
+            <div class="summary-card risk-low">
+                <h3>Low</h3>
+                <h2>{{index .Summary.RiskBreakdown "LOW"}}</h2>
             </div>
         </div>
         
-        <div class="stats">
-            <div class="stat-card critical">
-                <h3>` + strconv.Itoa(v.getRiskBreakdown()["CRITICAL"]) + `</h3>
-                <p>Kritik Risk</p>
+        <h2>🔍 Detailed Findings</h2>
+        {{range .Findings}}
+        <div class="finding risk-{{.Severity | lower}}">
+            <h3>{{.Title}}</h3>
+            <div class="meta">
+                <span class="badge">{{.Severity}}</span> | 
+                <span>CVSS: {{.CVSS}}</span> | 
+                <span>{{.CWE}}</span> | 
+                <span>Confidence: {{.Confidence}}%</span>
             </div>
-            <div class="stat-card high">
-                <h3>` + strconv.Itoa(v.getRiskBreakdown()["HIGH"]) + `</h3>
-                <p>Yüksek Risk</p>
+            <p>{{.Description}}</p>
+            <div class="meta"><strong>URL:</strong> {{.URL}}</div>
+            {{if .Parameter}}<div class="meta"><strong>Parameter:</strong> {{.Parameter}}</div>{{end}}
+            {{if .Payload}}
+            <div class="meta"><strong>Payload:</strong></div>
+            <div class="payload">{{.Payload}}</div>
+            {{end}}
+            {{if .Evidence}}<div class="meta"><strong>Evidence:</strong> {{.Evidence}}</div>{{end}}
+            <div class="solution">
+                <strong>💡 Solution:</strong> {{.Solution}}
             </div>
-            <div class="stat-card medium">
-                <h3>` + strconv.Itoa(v.getRiskBreakdown()["MEDIUM"]) + `</h3>
-                <p>Orta Risk</p>
-            </div>
-            <div class="stat-card low">
-                <h3>` + strconv.Itoa(v.getRiskBreakdown()["LOW"]) + `</h3>
-                <p>Düşük Risk</p>
-            </div>
-        </div>`
-
-	for i, finding := range v.findings {
-		riskClass := strings.ToLower(finding.Risk)
-		htmlContent += fmt.Sprintf(`
-        <div class="finding">
-            <div class="finding-header %s">
-                <h2>🚨 Bulgu #%d: %s</h2>
-                <div>
-                    <span class="badge cvss-badge">CVSS %.1f</span>
-                    <span class="badge cwe-badge">%s</span>
-                </div>
-            </div>
-            <div class="finding-body">
-                <p><strong>URL:</strong> %s</p>
-                <p><strong>Parametre:</strong> %s</p>
-                <p><strong>Açıklama:</strong> %s</p>
-                
-                <div class="solution">
-                    <h4>🛠️ Çözüm Önerileri:</h4>
-                    <div class="code">%s</div>
-                </div>
-                
-                <div class="references">
-                    <strong>📚 Referanslar:</strong><br>`,
-			riskClass, i+1, finding.Type, finding.CVSS, finding.CWE,
-			finding.URL, finding.Parameter, finding.Description, finding.Solution)
-
-		for _, ref := range finding.References {
-			htmlContent += fmt.Sprintf(`<a href="%s" target="_blank">%s</a>`, ref, ref)
-		}
-
-		htmlContent += `
-                </div>
-            </div>
-        </div>`
-	}
-
-	htmlContent += `
+        </div>
+        {{end}}
+        
+        <div class="footer">
+            <p>Generated by VulScan v{{.ScanInfo.Version}} | Total Requests: {{.Summary.Requests}}</p>
+            <p>⚠️ This tool is for authorized security testing only</p>
+        </div>
     </div>
 </body>
 </html>`
-
-	return ioutil.WriteFile("vulscan_rapor_v3.html", []byte(htmlContent), 0644)
+	
+	tmpl, err := template.New("report").Funcs(template.FuncMap{
+		"lower": strings.ToLower,
+	}).Parse(htmlTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %v", err)
+	}
+	
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %v", err)
+	}
+	defer file.Close()
+	
+	return tmpl.Execute(file, result)
 }
 
-func main() {
-	fmt.Println(`
- __      __     _ _____                 
- \ \    / /    | / ____|                
-  \ \  / /   _ | | (___   ___ __ _ _ __  
-   \ \/ / | | || \___ \ / __/ _ | '_ \ 
-    \  /| |_| || ____) | (_| (_| | | | |
-     \/ \__,_||_|_____/ \___\__,_|_| |_|
-                                        
-    🛡️  VulScan v3.0 - Gelişmiş Web Güvenlik Tarayıcısı
-    ⚡ Yeni: CVSS skorlama, JSON çıktı, SSL/TLS kontrolleri
-    `)
-
-	if len(os.Args) < 2 {
-		fmt.Println("📋 KULLANIM:")
-		fmt.Println("  ./vulscan <hedef_url> [seçenekler]")
-		fmt.Println("\n🎯 ÖRNEKLER:")
-		fmt.Println("  ./vulscan http://example.com/page.php?id=1")
-		fmt.Println("  ./vulscan http://example.com --verbose --threads 10")
-		fmt.Println("  ./vulscan http://example.com --output report.json --timeout 15")
-		fmt.Println("\n⚙️ SEÇENEKLER:")
-		fmt.Println("  --verbose, -v     : Detaylı çıktı")
-		fmt.Println("  --threads, -t     : Thread sayısı (varsayılan: 5)")
-		fmt.Println("  --timeout         : İstek zaman aşımı (saniye, varsayılan: 10)")
-		fmt.Println("  --output, -o      : JSON çıktı dosyası")
-		fmt.Println("  --user-agent, -u  : Özel User-Agent")
-		fmt.Println("  --report          : HTML rapor oluştur")
-		os.Exit(1)
+// Load payloads from file
+func loadPayloadsFromFile(filename string, vulnType VulnType) error {
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		return nil // File doesn't exist, use default payloads
 	}
-
-	// Komut satırı argümanlarını parse et
-	config := Config{
-		Target:  os.Args[1],
-		Threads: 5,
-		Timeout: 10,
-		Verbose: false,
-	}
-
-	// Seçenekleri işle
-	for i := 2; i < len(os.Args); i++ {
-		arg := os.Args[i]
-		switch arg {
-		case "--verbose", "-v":
-			config.Verbose = true
-		case "--threads", "-t":
-			if i+1 < len(os.Args) {
-				if threads, err := strconv.Atoi(os.Args[i+1]); err == nil {
-					config.Threads = threads
-					i++
-				}
-			}
-		case "--timeout":
-			if i+1 < len(os.Args) {
-				if timeout, err := strconv.Atoi(os.Args[i+1]); err == nil {
-					config.Timeout = timeout
-					i++
-				}
-			}
-		case "--output", "-o":
-			if i+1 < len(os.Args) {
-				config.OutputFile = os.Args[i+1]
-				i++
-			}
-		case "--user-agent", "-u":
-			if i+1 < len(os.Args) {
-				config.UserAgent = os.Args[i+1]
-				i++
-			}
-		case "--report":
-			// HTML rapor flag'i - generateHTMLReport() çağırılacak
-		}
-	}
-
-	// URL'yi parse et ve doğrula
-	u, err := url.Parse(config.Target)
+	
+	file, err := os.Open(filename)
 	if err != nil {
-		fmt.Printf("❌ Geçersiz URL: %v\n", err)
+		return err
+	}
+	defer file.Close()
+	
+	var newPayloads []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" && !strings.HasPrefix(line, "#") {
+			newPayloads = append(newPayloads, line)
+		}
+	}
+	
+	if len(newPayloads) > 0 {
+		payloads[vulnType] = newPayloads
+	}
+	
+	return scanner.Err()
+}
+
+// Main function
+func main() {
+	// Command line flags
+	var options Options
+	flag.StringVar(&options.Target, "target", "", "Target URL to scan")
+	flag.BoolVar(&options.Verbose, "verbose", false, "Enable verbose output")
+	flag.BoolVar(&options.Verbose, "v", false, "Enable verbose output (shorthand)")
+	flag.IntVar(&options.Threads, "threads", 5, "Number of concurrent threads")
+	flag.IntVar(&options.Threads, "t", 5, "Number of concurrent threads (shorthand)")
+	flag.IntVar(&options.Timeout, "timeout", 10, "Request timeout in seconds")
+	flag.StringVar(&options.Output, "output", "", "Output file for JSON results")
+	flag.StringVar(&options.Output, "o", "", "Output file for JSON results (shorthand)")
+	flag.StringVar(&options.UserAgent, "user-agent", "", "Custom User-Agent string")
+	flag.StringVar(&options.UserAgent, "u", "", "Custom User-Agent string (shorthand)")
+	flag.BoolVar(&options.Report, "report", false, "Generate HTML report")
+	flag.StringVar(&options.ConfigFile, "config", "", "Configuration file path")
+	flag.IntVar(&options.RateLimit, "rate-limit", 10, "Requests per second limit")
+	flag.StringVar(&options.Headers, "headers", "", "Custom headers (format: 'Header1:Value1,Header2:Value2')")
+	flag.StringVar(&options.Proxy, "proxy", "", "Proxy URL (http://proxy:port)")
+	
+	version := flag.Bool("version", false, "Show version information")
+	help := flag.Bool("help", false, "Show help message")
+	flag.BoolVar(help, "h", false, "Show help message (shorthand)")
+	
+	flag.Parse()
+	
+	// Show version
+	if *version {
+		fmt.Printf("VulScan v%s\n", Version)
+		fmt.Println("Advanced Web Security Scanner")
+		fmt.Println("Developed by ATOMGAMERAGA")
+		os.Exit(0)
+	}
+	
+	// Show help
+	if *help {
+		fmt.Printf(Banner, Version)
+		fmt.Println("\nUsage:")
+		fmt.Println("  vulscan [options] <target-url>")
+		fmt.Println("\nOptions:")
+		flag.PrintDefaults()
+		fmt.Println("\nExamples:")
+		fmt.Println("  vulscan http://example.com/page.php?id=1")
+		fmt.Println("  vulscan --verbose --threads 10 --output report.json http://example.com")
+		fmt.Println("  vulscan --report --config config.yaml http://example.com")
+		fmt.Println("\nSupported Vulnerability Types:")
+		fmt.Println("  • SQL Injection (Classic & Blind)")
+		fmt.Println("  • Cross-Site Scripting (XSS)")
+		fmt.Println("  • Directory Traversal / LFI")
+		fmt.Println("  • Command Injection")
+		fmt.Println("  • Open Redirect")
+		fmt.Println("  • CSRF Detection")
+		fmt.Println("  • Security Headers Analysis")
+		fmt.Println("  • SSL/TLS Configuration")
+		fmt.Println("  • Cookie Security")
+		fmt.Println("\nRisk Levels (CVSS v3.1):")
+		fmt.Println("  🔴 CRITICAL (9.0-10.0) - Immediate action required")
+		fmt.Println("  🟠 HIGH     (7.0-8.9)  - Fix within 1 week")
+		fmt.Println("  🟡 MEDIUM   (4.0-6.9)  - Fix within 1 month")
+		fmt.Println("  🟢 LOW      (0.1-3.9)  - Fix in next update")
+		fmt.Println("\n⚠️  Legal Notice:")
+		fmt.Println("This tool should only be used on systems you own or have explicit permission to test.")
+		os.Exit(0)
+	}
+	
+	// Get target from command line args if not provided via flag
+	if options.Target == "" {
+		args := flag.Args()
+		if len(args) < 1 {
+			fmt.Printf(Banner, Version)
+			fmt.Println("Error: Target URL is required")
+			fmt.Println("\nUsage: vulscan [options] <target-url>")
+			fmt.Println("Try 'vulscan --help' for more information.")
+			os.Exit(1)
+		}
+		options.Target = args[0]
+	}
+	
+	// Validate target URL
+	if !strings.HasPrefix(options.Target, "http://") && !strings.HasPrefix(options.Target, "https://") {
+		options.Target = "http://" + options.Target
+	}
+	
+	// Show banner
+	if !options.Verbose {
+		fmt.Printf(Banner, Version)
+	}
+	
+	// Create scanner
+	scanner, err := NewScanner(&options)
+	if err != nil {
+		fmt.Printf("Error creating scanner: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("🎯 Hedef URL: %s\n", config.Target)
-	fmt.Printf("⚙️  Thread Sayısı: %d\n", config.Threads)
-	fmt.Printf("⏱️  Timeout: %d saniye\n", config.Timeout)
-	if config.Verbose {
-		fmt.Printf("📢 Verbose mod: Aktif\n")
-	}
-	if config.OutputFile != "" {
-		fmt.Printf("💾 JSON çıktı: %s\n", config.OutputFile)
-	}
-	fmt.Println("\n🚀 Gelişmiş güvenlik taraması başlatılıyor...")
-	fmt.Println(strings.Repeat("─", 80))
-
-	scanner := NewVulScan(config)
-
-	// URL'den parametreleri çıkar
-	params := make(map[string]string)
-	for key, values := range u.Query() {
-		if len(values) > 0 {
-			params[key] = values[0]
-		}
-	}
-
-	// Varsayılan test parametreleri ekle
-	if len(params) == 0 {
-		params["id"] = "1"
-		params["page"] = "index"
-		params["search"] = "test"
-		params["file"] = "page"
-		params["url"] = "https://example.com"
-		params["redirect"] = "/dashboard"
-	}
-
-	baseURL := strings.Split(config.Target, "?")[0]
-	var wg sync.WaitGroup
-
-	// Paralel tarama işlemleri
-	scanTasks := []func(){
-		func() {
-			defer wg.Done()
-			scanner.scanSQL(baseURL, params)
-		},
-		func() {
-			defer wg.Done()
-			scanner.scanXSS(baseURL, params)
-		},
-		func() {
-			defer wg.Done()
-			scanner.scanLFI(baseURL, params)
-		},
-		func() {
-			defer wg.Done()
-			scanner.scanHeaders(baseURL)
-		},
-		func() {
-			defer wg.Done()
-			scanner.scanCSRF(baseURL)
-		},
-		func() {
-			defer wg.Done()
-			scanner.scanCookies(baseURL)
-		},
-		func() {
-			defer wg.Done()
-			scanner.scanSSL(config.Target)
-		},
-		func() {
-			defer wg.Done()
-			scanner.scanOpenRedirect(baseURL, params)
-		},
-	}
-
-	// Thread havuzu ile taramaları çalıştır
-	semaphore := make(chan struct{}, config.Threads)
 	
-	for _, task := range scanTasks {
-		wg.Add(1)
-		go func(t func()) {
-			semaphore <- struct{}{}
-			t()
-			<-semaphore
-		}(task)
+	// Load custom payloads from files
+	payloadFiles := map[VulnType]string{
+		SQLInjection:     scanner.config.Payloads.SQLInjection,
+		XSS:              scanner.config.Payloads.XSS,
+		DirectoryTraversal: scanner.config.Payloads.DirectoryTraversal,
+		CommandInjection: scanner.config.Payloads.CommandInjection,
 	}
-
-	wg.Wait()
-
-	// Sonuçları göster
-	scanner.printResults()
-
-	// JSON raporu oluştur (eğer belirtilmişse)
-	if config.OutputFile != "" {
-		if err := scanner.generateJSONReport(); err != nil {
-			fmt.Printf("❌ JSON raporu oluşturulamadı: %v\n", err)
-		} else {
-			fmt.Printf("✅ JSON raporu oluşturuldu: %s\n", config.OutputFile)
-		}
-	}
-
-	// HTML raporu oluştur (eğer --report belirtilmişse)
-	for _, arg := range os.Args {
-		if arg == "--report" {
-			if err := scanner.generateHTMLReport(); err != nil {
-				fmt.Printf("❌ HTML raporu oluşturulamadı: %v\n", err)
-			} else {
-				fmt.Printf("✅ HTML raporu oluşturuldu: vulscan_rapor_v3.html\n")
+	
+	for vulnType, filename := range payloadFiles {
+		if filename != "" {
+			if err := loadPayloadsFromFile(filename, vulnType); err != nil {
+				fmt.Printf("Warning: Failed to load payloads from %s: %v\n", filename, err)
+			} else if options.Verbose {
+				fmt.Printf("Loaded custom payloads from: %s\n", filename)
 			}
-			break
 		}
 	}
-
-	// Son özet
-	riskCount := scanner.getRiskBreakdown()
-	totalFindings := len(scanner.findings)
 	
-	fmt.Printf("\n🎊 TARAMA TAMAMLANDI!\n")
-	fmt.Printf("══════════════════════════════════════════════════════════════════════════════════════════════════\n")
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
 	
-	if totalFindings > 0 {
-		fmt.Printf("📊 %d güvenlik açığı tespit edildi\n", totalFindings)
-		fmt.Printf("⚡ Ortalama CVSS skoru: %.1f/10\n", scanner.getAverageCVSS())
-		
-		if riskCount["CRITICAL"] > 0 || riskCount["HIGH"] > 0 {
-			fmt.Printf("\n🚨 ACİL EYLEM GEREKLİ: Yüksek/Kritik riskli açıkları derhal kapatın!\n")
+	// Start scanning
+	fmt.Printf("🎯 Target: %s\n", options.Target)
+	fmt.Printf("⚙️  Threads: %d | Timeout: %ds | Rate Limit: %d req/s\n", 
+		scanner.config.Scan.Threads, scanner.config.Scan.Timeout, scanner.config.Scan.RateLimit)
+	fmt.Println("🔍 Starting comprehensive security scan...")
+	fmt.Println(strings.Repeat("─", 60))
+	
+	// Perform scan
+	result, err := scanner.Scan(ctx, options.Target)
+	if err != nil {
+		fmt.Printf("Scan failed: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Display results summary
+	fmt.Println(strings.Repeat("─", 60))
+	fmt.Println("📊 SCAN SUMMARY")
+	fmt.Println(strings.Repeat("─", 60))
+	fmt.Printf("🎯 Target: %s\n", result.ScanInfo.Target)
+	fmt.Printf("⏱️  Duration: %s\n", result.ScanInfo.Duration)
+	fmt.Printf("📡 Requests: %d\n", result.Summary.Requests)
+	fmt.Printf("🔍 Total Findings: %d\n", result.Summary.TotalFindings)
+	
+	if result.Summary.TotalFindings > 0 {
+		fmt.Println("\n📈 Risk Breakdown:")
+		for _, level := range []RiskLevel{RiskCritical, RiskHigh, RiskMedium, RiskLow, RiskInfo} {
+			count := result.Summary.RiskBreakdown[level]
+			if count > 0 {
+				emoji := map[RiskLevel]string{
+					RiskCritical: "🔴", RiskHigh: "🟠", RiskMedium: "🟡", RiskLow: "🟢", RiskInfo: "🔵",
+				}[level]
+				fmt.Printf("   %s %-8s: %d\n", emoji, level, count)
+			}
 		}
 		
-		fmt.Printf("\n💡 Sonraki adımlar:\n")
-		fmt.Printf("   1. 🔴 Kritik ve yüksek riskli açıkları önceliklendirin\n")
-		fmt.Printf("   2. 🛠️  Çözüm önerilerini uygulayın\n") 
-		fmt.Printf("   3. 🔄 Düzeltmelerden sonra yeniden tarayın\n")
-		fmt.Printf("   4. 🎓 Geliştirici ekibini güvenlik konularında eğitin\n")
+		fmt.Println("\n🎯 Vulnerability Types:")
+		for vulnType, count := range result.Summary.TypeBreakdown {
+			if count > 0 {
+				fmt.Printf("   • %-20s: %d\n", vulnType, count)
+			}
+		}
+		
+		// Display top findings
+		if options.Verbose && len(result.Findings) > 0 {
+			fmt.Println("\n🚨 TOP FINDINGS:")
+			for i, finding := range result.Findings {
+				if i >= 5 { // Show only top 5
+					break
+				}
+				emoji := map[RiskLevel]string{
+					RiskCritical: "🔴", RiskHigh: "🟠", RiskMedium: "🟡", RiskLow: "🟢", RiskInfo: "🔵",
+				}[finding.Severity]
+				fmt.Printf("   %s [%s] %s\n", emoji, finding.Severity, finding.Title)
+				fmt.Printf("      URL: %s\n", finding.URL)
+				if finding.Parameter != "" {
+					fmt.Printf("      Parameter: %s\n", finding.Parameter)
+				}
+				fmt.Println()
+			}
+		}
 	} else {
-		fmt.Printf("🎉 Mükemmel! Hiçbir güvenlik açığı bulunamadı.\n")
-		fmt.Printf("✨ Sisteminiz temel güvenlik testlerini başarıyla geçti.\n")
-		fmt.Printf("\n💡 Güvenlik önerileri:\n")
-		fmt.Printf("   • 🔄 Düzenli güvenlik taramaları yapın\n")
-		fmt.Printf("   • 🛡️  WAF kullanmayı değerlendirin\n")
-		fmt.Printf("   • 📊 Güvenlik loglarını izleyin\n")
-		fmt.Printf("   • 🎯 Daha kapsamlı penetrasyon testi yaptırın\n")
+		fmt.Println("✅ No security vulnerabilities detected!")
 	}
-
-	fmt.Printf("\n🔗 Daha fazla bilgi için: https://owasp.org/www-project-top-ten/\n")
-	fmt.Printf("⭐ VulScan v3.0 - Made with ❤️  for cybersecurity\n")
+	
+	// Handle errors
+	if len(result.Errors) > 0 {
+		fmt.Printf("\n⚠️  Errors encountered: %d\n", len(result.Errors))
+		if options.Verbose {
+			fmt.Println("Error details:")
+			for _, errMsg := range result.Errors {
+				fmt.Printf("   • %s\n", errMsg)
+			}
+		}
+	}
+	
+	// Export results
+	if options.Output != "" {
+		if err := scanner.ExportJSON(result, options.Output); err != nil {
+			fmt.Printf("Error saving JSON report: %v\n", err)
+		} else {
+			fmt.Printf("💾 JSON report saved: %s\n", options.Output)
+		}
+	}
+	
+	// Generate HTML report
+	if options.Report {
+		reportFile := "report.html"
+		if options.Output != "" {
+			reportFile = strings.TrimSuffix(options.Output, filepath.Ext(options.Output)) + ".html"
+		}
+		
+		if err := scanner.GenerateHTMLReport(result, reportFile); err != nil {
+			fmt.Printf("Error generating HTML report: %v\n", err)
+		} else {
+			fmt.Printf("📄 HTML report generated: %s\n", reportFile)
+		}
+	}
+	
+	// Exit with appropriate code
+	if result.Summary.RiskBreakdown[RiskCritical] > 0 || result.Summary.RiskBreakdown[RiskHigh] > 0 {
+		fmt.Println("\n🚨 Critical or High risk vulnerabilities found!")
+		fmt.Println("   Immediate action recommended.")
+		os.Exit(2) // Exit code 2 for security issues
+	}
+	
+	if result.Summary.TotalFindings > 0 {
+		os.Exit(1) // Exit code 1 for any findings
+	}
+	
+	fmt.Println("\n🎉 Scan completed successfully!")
+	os.Exit(0) // Exit code 0 for clean scan
 }
