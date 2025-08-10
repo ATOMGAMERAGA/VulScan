@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # VulScan main service
+  vulscan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+        BUILD_TIME: ${BUILD_TIME:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}
+        GIT_COMMIT: ${GIT_COMMIT:-$(git rev-parse --short HEAD)}
+    image: vulscan:${VERSION:-latest}
+    container_name: vulscan-scanner
+    volumes:
+      - ./reports:/app/reports
+      - ./configs:/app/configs:ro
+    environment:
+      - VULSCAN_OUTPUT_DIR=/app/reports
+      - VULSCAN_CONFIG_DIR=/app/configs
+      - VULSCAN_THREADS=${THREADS:-5}
+      - VULSCAN_TIMEOUT=${TIMEOUT:-10}
+      - VULSCAN_VERBOSE=${VERBOSE:-false}
+    networks:
+      - vulscan-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    command: ["--help"]
+
+  # Optional: Web dashboard for results
+  vulscan-dashboard:
+    image: nginx:alpine
+    container_name: vulscan-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-8080}:80"
+    volumes:
+      - ./reports:/usr/share/nginx/html/reports:ro
+      - ./dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./dashboard/html:/usr/share/nginx/html:ro
+    networks:
+      - vulscan-network
+    restart: unless-stopped
+    depends_on:
+      - vulscan
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+
+  # Optional: Database for storing scan results
+  vulscan-db:
+    image: postgres:15-alpine
+    container_name: vulscan-database
+    environment:
+      - POSTGRES_DB=${DB_NAME:-vulscan}
+      - POSTGRES_USER=${DB_USER:-vulscan}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-secure_password}
+    volumes:
+      - vulscan-db-data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - vulscan-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-vulscan}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Optional: Redis for caching and job queuing
+  vulscan-cache:
+    image: redis:7-alpine
+    container_name: vulscan-cache
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    volumes:
+      - vulscan-cache-data:/data
+    networks:
+      - vulscan-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  vulscan-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  vulscan-db-data:
+    driver: local
+  vulscan-cache-data:
+    driver: local
