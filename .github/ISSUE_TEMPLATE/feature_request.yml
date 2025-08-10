@@ -1,0 +1,178 @@
+name: 💡 Feature Request
+description: Suggest a new feature or enhancement for VulScan
+title: "[FEATURE] "
+labels: [enhancement, needs-triage]
+assignees: [ATOMGAMERAGA]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! 🚀
+        
+        This will help make VulScan even better for the security community.
+
+  - type: checkboxes
+    attributes:
+      label: Pre-flight Checklist
+      description: Please confirm you have done the following
+      options:
+        - label: I have searched existing issues and discussions for duplicates
+          required: true
+        - label: I have read the documentation and roadmap
+          required: true
+        - label: This is not a bug report (use Bug Report for those)
+          required: true
+
+  - type: textarea
+    attributes:
+      label: 💡 Feature Description
+      description: A clear and concise description of the feature you'd like to see
+      placeholder: Describe the feature you want to add to VulScan
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 🎯 Use Case/Problem
+      description: What problem does this feature solve? What's your use case?
+      placeholder: |
+        - As a security professional, I want to...
+        - This would help with...
+        - Currently I have to... but with this feature I could...
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: ✨ Proposed Solution
+      description: Describe how you envision this feature working
+      placeholder: |
+        How should this feature work?
+        What should the user interface look like?
+        Any specific implementation details?
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: 📂 Feature Category
+      description: Which area of VulScan does this feature relate to?
+      options:
+        - Vulnerability Detection (New scan types)
+        - Reporting (Output formats, UI improvements)
+        - Performance (Speed, memory usage)
+        - Configuration (Settings, customization)
+        - Integration (APIs, third-party tools)
+        - Security (Authentication, encryption)
+        - User Experience (CLI, documentation)
+        - Other (please specify in additional context)
+    validations:
+      required: true
+
+  - type: dropdown
+    attributes:
+      label: ⚡ Priority Level
+      description: How important is this feature to you?
+      options:
+        - 🔴 High - Essential for my workflow
+        - 🟡 Medium - Would be very helpful
+        - 🟢 Low - Nice to have
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: 🔍 Alternative Solutions
+      description: Are there any workarounds or alternative solutions you've considered?
+      placeholder: |
+        - I currently work around this by...
+        - Alternative tools that have this feature...
+        - Other approaches I've tried...
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: 🛠️ Technical Considerations
+      description: Any technical details, constraints, or implementation ideas?
+      placeholder: |
+        - Command line options: --new-feature
+        - Configuration format ideas
+        - Dependencies or libraries needed
+        - Performance considerations
+        - Security implications
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
+      label: 📚 Examples/References
+      description: Any examples from other tools, documentation, or references?
+      placeholder: |
+        - Similar features in other security tools
+        - OWASP guidelines or standards
+        - Research papers or articles
+        - Code examples or mockups
+    validations:
+      required: false
+
+  - type: checkboxes
+    attributes:
+      label: 🎯 Target Users
+      description: Who would benefit from this feature?
+      options:
+        - label: Penetration testers
+        - label: Security researchers
+        - label: DevSecOps engineers
+        - label: Bug bounty hunters
+        - label: Security consultants
+        - label: Red team operators
+        - label: Students/learners
+        - label: All VulScan users
+
+  - type: textarea
+    attributes:
+      label: 📈 Success Metrics
+      description: How would we measure the success of this feature?
+      placeholder: |
+        - Faster scan times
+        - Better detection accuracy
+        - Easier to use
+        - More comprehensive reports
+        - Reduced false positives
+    validations:
+      required: false
+
+  - type: checkboxes
+    attributes:
+      label: 🤝 Contribution
+      description: Would you be willing to help implement this feature?
+      options:
+        - label: I can provide testing and feedback
+        - label: I'd like to work on implementing this
+        - label: I can help with documentation
+        - label: I can provide more detailed requirements
+
+  - type: textarea
+    attributes:
+      label: 📎 Additional Context
+      description: Any other context, screenshots, or information about the feature
+      placeholder: |
+        - Screenshots or mockups
+        - Related issues or discussions
+        - Timeline considerations
+        - Any other relevant information
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        **Thank you for your feature suggestion!** 🙏
+        
+        Your input helps shape the future of VulScan. We'll review this request and get back to you soon.
+        
+        Feel free to join the discussion in our [Discussions](https://github.com/ATOMGAMERAGA/VulScan/discussions) section!
