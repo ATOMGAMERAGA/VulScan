@@ -59,6 +59,12 @@ VulScan v3.0.1, modern web uygulamalarında yaygın güvenlik açıklarını tes
 
 > **📋 Detaylı kurulum talimatları ve farklı işletim sistemleri için [Wiki - Hızlı Başlangıç](https://github.com/ATOMGAMERAGA/VulScan/wiki#-h%C4%B1zl%C4%B1-ba%C5%9Flang%C4%B1%C3%A7) sayfasını ziyaret edin.**
 
+**Windows (Önerilen kurulum yöntemi):**
+```powershell
+# Otomatik kurulum scripti
+iwr -useb https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/install.ps1 | iex
+```
+
 #### Hızlı Kurulum
 
 ```bash
@@ -366,19 +372,19 @@ Katkılarınızı bekliyoruz! Lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyas�
 
 ## 📋 Yol Haritası
 
-### v3.0.1 (Q1 2025) ✅ TAMAMLANDI
+### v3.1 (Q1 2025) ✅ TAMAMLANDI
 - [x] REST API desteği
 - [x] Database injection testleri
 - [x] WebSocket güvenlik kontrolleri
 - [x] Docker container desteği
 
-### v3.0.2 (Q3 2025)
+### v3.2 (Q3 2025)
 - [ ] REST API desteği genişletilmesi
 - [ ] Advanced Database injection testleri
 - [ ] WebSocket güvenlik kontrolleri
 - [ ] Kubernetes security scanning
 
-### v3.2.0 (Q4 2025)
+### v4.0 (Q4 2025)
 - [ ] GraphQL güvenlik testleri
 - [ ] Authentication bypass testleri
 - [ ] Business logic flaw detection
