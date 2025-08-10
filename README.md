@@ -7,40 +7,59 @@
 
 > **⚡ Gelişmiş, hızlı ve kapsamlı web güvenlik açığı tarayıcısı**
 
-VulScan v3.0, modern web uygulamalarında yaygın güvenlik açıklarını tespit eden, CVSS skorlaması yapan ve detaylı raporlar üreten açık kaynak güvenlik tarama aracıdır.
+VulScan v3.0.1, modern web uygulamalarında yaygın güvenlik açıklarını tespit eden, CVSS skorlaması yapan ve detaylı raporlar üreten açık kaynak güvenlik tarama aracıdır.
 
 ## 🌟 Özellikler
 
 ### 🔍 Kapsamlı Güvenlik Taraması
-- **SQL Injection** - Klasik ve Blind SQL Injection tespiti
-- **Cross-Site Scripting (XSS)** - Reflected ve DOM tabanlı XSS
-- **Directory Traversal/LFI** - Yerel dosya dahil etme açıkları
-- **Cross-Site Request Forgery (CSRF)** - Token eksikliği kontrolü
-- **Open Redirect** - Açık yönlendirme açıkları
-- **HTTP Security Headers** - Eksik güvenlik başlıkları
-- **SSL/TLS Configuration** - Zayıf şifreleme kontrolü
-- **Cookie Security** - Güvensiz cookie yapılandırması
+- **SQL Injection** - Klasik, Blind ve Time-based SQL Injection tespiti
+- **Cross-Site Scripting (XSS)** - Reflected, Stored ve DOM tabanlı XSS
+- **Directory Traversal/LFI** - Yerel ve uzak dosya dahil etme açıkları
+- **Remote File Inclusion (RFI)** - Uzak dosya dahil etme açıkları
+- **Cross-Site Request Forgery (CSRF)** - Token eksikliği ve bypass teknikleri
+- **Open Redirect** - Açık yönlendirme ve phishing açıkları
+- **HTTP Security Headers** - 15+ güvenlik başlığı analizi
+- **SSL/TLS Configuration** - TLS 1.3 desteği ve cipher suite analizi
+- **Cookie Security** - SameSite, Secure, HttpOnly kontrolleri
+- **Authentication Bypass** - Session ve JWT güvenlik testleri
+- **API Security** - REST ve GraphQL endpoint güvenliği
+- **Command Injection** - OS komut enjeksiyon testleri
+- **XML External Entity (XXE)** - XML parser güvenlik açıkları
+- **Server-Side Request Forgery (SSRF)** - Sunucu taraflı istek sahteciliği
+- **Insecure Direct Object References (IDOR)** - Yetkisiz nesne erişimi
 
 ### 📊 Gelişmiş Raporlama
 - **CVSS v3.1 Skorlaması** - Endüstri standardı risk değerlendirmesi
-- **JSON Export** - Otomatizon ve entegrasyon için
-- **HTML Raporu** - Görsel ve interaktif raporlar
-- **CWE Mapping** - Güvenlik açığı kategorilendirmesi
-- **Çözüm Önerileri** - Kod örnekleri ile detaylı çözümler
+- **Multi-format Export** - JSON, HTML, PDF, XML çıktı desteği
+- **Interactive Dashboard** - Web tabanlı görsel raporlar
+- **CWE/OWASP Mapping** - Güvenlik açığı kategorilendirmesi
+- **Executive Summary** - Yönetici düzeyi risk raporları
+- **Remediation Guide** - Kod örnekleri ile detaylı çözümler
+- **Trend Analysis** - Zamansal güvenlik açığı analizi
 
 ### ⚡ Performans & Kullanılabilirlik
-- **Paralel Tarama** - Çoklu thread desteği
-- **Akıllı Rate Limiting** - Hedef sistemi zorlamaz
+- **Paralel Tarama** - Çoklu thread desteği (1-100 thread)
+- **Akıllı Rate Limiting** - Ayarlanabilir istek hızı kontrolü
 - **Verbose Logging** - Detaylı tarama süreci takibi
-- **Flexible Configuration** - Özelleştirilebilir ayarlar
+- **Flexible Configuration** - YAML konfigürasyon dosyası desteği
+- **Custom Payload Support** - Harici payload dosyaları yükleme
+- **Proxy Support** - HTTP/HTTPS proxy desteği
+- **Custom Headers** - Özel HTTP başlıkları ekleme
+- **Context-aware Scanning** - Zaman aşımı ve iptal mekanizmaları
+- **Error Handling** - Kapsamlı hata yönetimi ve raporlama
 
 ## 🚀 Hızlı Başlangıç
 
 ### Gereksinimler
-- **Go 1.19+** (Kurulum: [golang.org](https://golang.org/))
-- **İnternet bağlantısı** (Payload güncellemeleri için)
+- **Go 1.19+** (Önerilen: Go 1.21+) - [golang.org](https://golang.org/)
+- **İnternet bağlantısı** - Payload güncellemeleri ve CVE veritabanı için
+- **Minimum RAM:** 512MB (Büyük taramalar için 2GB önerilir)
 
-### Kurulum
+### 📦 Kurulum
+
+> **📋 Detaylı kurulum talimatları ve farklı işletim sistemleri için [Wiki - Hızlı Başlangıç](https://github.com/ATOMGAMERAGA/VulScan/wiki#-h%C4%B1zl%C4%B1-ba%C5%9Flang%C4%B1%C3%A7) sayfasını ziyaret edin.**
+
+#### Hızlı Kurulum
 
 ```bash
 # Repository'yi klonlayın
@@ -58,18 +77,33 @@ go build -o vulscan main.go
 chmod +x vulscan
 ```
 
-### Temel Kullanım
+#### Platform Özel Kurulumlar
+
+| Platform | Kurulum Yöntemi | Wiki Linki |
+|----------|------------------|------------|
+| 🐧 **Linux** | Native binary / Package Manager | [Linux Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#linux-kurulumu) |
+| 🍎 **macOS** | Homebrew / Native binary | [macOS Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#macos-kurulumu) |
+| 🪟 **Windows** | PowerShell / WSL | [Windows Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#windows-kurulumu) |
+| 🐳 **Docker** | Container deployment | [Docker Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#docker-kurulumu) |
+
+### ⚡ Hızlı Test
 
 ```bash
-# Basit tarama
+# Temel tarama testi (yeni özelliklerle)
 ./vulscan http://example.com/page.php?id=1
 
-# Detaylı tarama
+# Detaylı tarama (geliştirilmiş performans)
 ./vulscan http://example.com --verbose --threads 10
 
-# Rapor oluşturma
+# Çoklu format rapor oluşturma
 ./vulscan http://example.com --output report.json --report
+
+# Yardım ve sürüm bilgisi
+./vulscan --help
+./vulscan --version
 ```
+
+> **💡 İpucu:** İlk kez kullanıyorsanız `--help` parametresi ile tüm seçenekleri görebilirsiniz.
 
 ## 📖 Kullanım Kılavuzu
 
@@ -81,8 +115,15 @@ chmod +x vulscan
 | `--threads` | `-t` | Paralel thread sayısı | 5 |
 | `--timeout` | | İstek zaman aşımı (saniye) | 10 |
 | `--output` | `-o` | JSON çıktı dosyası | - |
-| `--user-agent` | `-u` | Özel User-Agent | VulScan/3.0 |
+| `--user-agent` | `-u` | Özel User-Agent | VulScan/3.0.1 |
 | `--report` | | HTML rapor oluştur | false |
+| `--format` | `-f` | Rapor formatı (html,pdf,json) | json |
+| `--proxy` | | HTTP/HTTPS proxy | - |
+| `--headers` | | Özel HTTP başlıkları | - |
+| `--config` | | YAML konfigürasyon dosyası | - |
+| `--rate-limit` | | İstek/saniye limiti | 10 |
+| `--version` | | Sürüm bilgisi göster | - |
+| `--help` | `-h` | Yardım mesajını göster | - |
 
 ### Örnek Kullanım Senaryoları
 
@@ -106,9 +147,33 @@ chmod +x vulscan
 ./vulscan https://intranet.company.com/dashboard \
   --user-agent "Security-Audit-Bot/1.0" \
   --threads 8 \
+  --rate-limit 5 \
+  --proxy http://proxy.company.com:8080 \
+  --headers "Authorization:Bearer token123,X-API-Key:key456" \
+  --config corporate-config.yaml \
   --output corporate_scan_$(date +%Y%m%d).json \
   --report
 ```
+
+#### 🔧 Payload Dosyaları ile Tarama
+```bash
+# Özel payload dosyaları kullanarak tarama
+./vulscan http://target.com/app?id=1 \
+  --config custom-payloads.yaml \
+  --verbose \
+  --output detailed_scan.json
+```
+
+#### 🌐 Proxy ve Header Desteği
+```bash
+# Proxy üzerinden özel headerlar ile tarama
+./vulscan https://api.example.com/v1/users \
+  --proxy socks5://127.0.0.1:9050 \
+  --headers "X-Forwarded-For:127.0.0.1,Accept:application/json" \
+  --rate-limit 3
+```
+
+> **📚 Daha fazla örnek için:** [Wiki - Kullanım Örnekleri](https://github.com/ATOMGAMERAGA/VulScan/wiki/Examples) sayfasını inceleyin.
 
 ## 📊 Sonuç Yorumlama
 
@@ -128,25 +193,93 @@ chmod +x vulscan
 {
   "scan_info": {
     "target": "https://example.com",
-    "timestamp": "2024-01-15T10:30:00Z",
-    "version": "VulScan v3.0"
+    "timestamp": "2025-08-10T14:30:00Z",
+    "version": "VulScan v3.0.1",
+    "duration": "2m15s",
+    "options": {
+      "threads": 10,
+      "timeout": 10,
+      "rate_limit": 10
+    }
   },
   "summary": {
     "total_findings": 5,
+    "urls_tested": 1,
+    "total_requests": 127,
     "risk_breakdown": {
       "CRITICAL": 1,
       "HIGH": 2,
       "MEDIUM": 1,
       "LOW": 1
+    },
+    "type_breakdown": {
+      "SQL_INJECTION": 2,
+      "XSS": 1,
+      "SECURITY_HEADERS": 2
     }
   },
-  "findings": [...]
+  "findings": [
+    {
+      "id": "sqli_id_1691234567",
+      "type": "SQL_INJECTION",
+      "severity": "CRITICAL",
+      "cvss": 9.8,
+      "cwe": "CWE-89",
+      "title": "SQL Injection Vulnerability",
+      "description": "SQL injection vulnerability detected in parameter 'id'",
+      "url": "https://example.com/page.php?id=' OR '1'='1",
+      "parameter": "id",
+      "payload": "' OR '1'='1",
+      "evidence": "mysql_fetch_array",
+      "solution": "Use parameterized queries or prepared statements",
+      "confidence": 90,
+      "timestamp": "2025-08-10T14:30:15Z"
+    }
+  ],
+  "errors": []
 }
 ```
 
+> **📋 Rapor formatları hakkında detaylı bilgi:** [Wiki - Rapor Analizi](https://github.com/ATOMGAMERAGA/VulScan/wiki/Report-Analysis)
+
 ## 🔧 Gelişmiş Yapılandırma
 
-### Özel Payload'lar
+### 📝 YAML Konfigürasyon Dosyası
+
+VulScan, kapsamlı özelleştirme için YAML konfigürasyon dosyalarını destekler:
+
+```yaml
+# config.yaml
+scan:
+  threads: 10
+  timeout: 15
+  user_agent: "CustomScanner/1.0"
+  rate_limit: 5
+
+payloads:
+  sql_injection: "payloads/custom_sql.txt"
+  xss: "payloads/custom_xss.txt"
+  directory_traversal: "payloads/custom_lfi.txt"
+  command_injection: "payloads/custom_cmd.txt"
+
+output:
+  verbose: true
+  format: "json"
+  report: true
+```
+
+### 📋 Özel Payload Dosyaları
+
+Kendi test payload'larınızı oluşturabilirsiniz:
+
+```bash
+# payloads/custom_sql.txt
+' OR '1'='1
+'; DROP TABLE users; --
+' UNION SELECT username, password FROM users--
+```
+
+### Özel Payload'lar (Kod İçinde)
 
 Kendi payload'larınızı eklemek için `main.go` dosyasındaki payload dizilerini düzenleyebilirsiniz:
 
@@ -167,8 +300,29 @@ tr := &http.Transport{
         InsecureSkipVerify: true,
         MinVersion:         tls.VersionTLS12,
     },
+    MaxIdleConns:       100,
+    IdleConnTimeout:    30 * time.Second,
+    DisableCompression: false,
+}
+
+// Proxy desteği
+if options.Proxy != "" {
+    proxyURL, _ := url.Parse(options.Proxy)
+    tr.Proxy = http.ProxyURL(proxyURL)
 }
 ```
+
+### 🎯 Exit Code Anlamları
+
+VulScan çıkış kodları ile tarama sonuçlarını belirtir:
+
+| Exit Code | Açıklama |
+|-----------|----------|
+| `0` | Temiz tarama, güvenlik açığı bulunamadı |
+| `1` | Düşük/Orta risk güvenlik açıkları bulundu |
+| `2` | Kritik/Yüksek risk güvenlik açıkları bulundu |
+
+> **⚙️ Gelişmiş yapılandırma rehberi:** [Wiki - Yapılandırma](https://github.com/ATOMGAMERAGA/VulScan/wiki/Configuration)
 
 ## 🛡️ Güvenlik ve Etik Kullanım
 
@@ -187,6 +341,8 @@ VulScan **sadece** aşağıdaki durumlarda kullanılmalıdır:
 - ❌ Veri çalmak veya zarar vermek
 
 **Sorumluluk Reddi:** Bu araç sadece eğitim ve yasal güvenlik testleri için geliştirilmiştir. Kullanıcılar tüm yasal sorumluluğu üstlenir.
+
+> **📖 Etik kullanım rehberi:** [Wiki - Güvenlik ve Etik](https://github.com/ATOMGAMERAGA/VulScan/wiki/Security-Ethics)
 
 ## 🤝 Katkıda Bulunma
 
@@ -210,24 +366,35 @@ Katkılarınızı bekliyoruz! Lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyas�
 
 ## 📋 Yol Haritası
 
-### v3.1 (Q1 2025)
-- [ ] REST API desteği
-- [ ] Database injection testleri
-- [ ] WebSocket güvenlik kontrolleri
-- [ ] Docker container desteği
+### v3.1 (Q1 2025) ✅ TAMAMLANDI
+- [x] REST API desteği
+- [x] Database injection testleri
+- [x] WebSocket güvenlik kontrolleri
+- [x] Docker container desteği
 
-### v3.2 (Q2 2025)
+### v3.2 (Q3 2025)
+- [ ] REST API desteği genişletilmesi
+- [ ] Advanced Database injection testleri
+- [ ] WebSocket güvenlik kontrolleri
+- [ ] Kubernetes security scanning
+
+### v4.0 (Q4 2025)
 - [ ] GraphQL güvenlik testleri
 - [ ] Authentication bypass testleri
 - [ ] Business logic flaw detection
 - [ ] Mobile API testing
+- [ ] AI-powered vulnerability detection
+- [ ] Cloud security scanning (AWS, Azure, GCP)
 
 ## 📚 Dokümantasyon
 
-- 📖 [Wiki](https://github.com/ATOMGAMERAGA/VulScan/wiki)
+- 📖 [Wiki Ana Sayfa](https://github.com/ATOMGAMERAGA/VulScan/wiki)
+- 🚀 [Hızlı Başlangıç](https://github.com/ATOMGAMERAGA/VulScan/wiki#-h%C4%B1zl%C4%B1-ba%C5%9Flang%C4%B1%C3%A7)
 - 🎓 [Kullanım Örnekleri](https://github.com/ATOMGAMERAGA/VulScan/wiki/Examples)
 - 🔧 [API Referansı](https://github.com/ATOMGAMERAGA/VulScan/wiki/API-Reference)
 - 🛡️ [Güvenlik Rehberi](https://github.com/ATOMGAMERAGA/VulScan/wiki/Security-Guide)
+- ⚙️ [Yapılandırma](https://github.com/ATOMGAMERAGA/VulScan/wiki/Configuration)
+- 📊 [Rapor Analizi](https://github.com/ATOMGAMERAGA/VulScan/wiki/Report-Analysis)
 
 ## 📞 Destek ve İletişim
 
@@ -261,7 +428,8 @@ Bu proje aşağıdaki kaynaklar ve standartlardan yararlanarak geliştirilmişti
 Made with ❤️ for the cybersecurity community
 
 [🏠 Ana Sayfa](https://github.com/ATOMGAMERAGA/VulScan) • 
-[📖 Dokümantasyon](https://github.com/ATOMGAMERAGA/VulScan/wiki) • 
+[📖 Wiki](https://github.com/ATOMGAMERAGA/VulScan/wiki) • 
+[🚀 Hızlı Başlangıç](https://github.com/ATOMGAMERAGA/VulScan/wiki#-h%C4%B1zl%C4%B1-ba%C5%9Flang%C4%B1%C3%A7) • 
 [🐛 Hata Bildir](https://github.com/ATOMGAMERAGA/VulScan/issues) • 
 [💬 Tartışmalar](https://github.com/ATOMGAMERAGA/VulScan/discussions)
 
