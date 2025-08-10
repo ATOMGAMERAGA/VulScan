@@ -44,8 +44,14 @@ jobs:
         go mod download
         go install honnef.co/go/tools/cmd/staticcheck@latest
         
-        # Install gosec using the installer script
-        curl -sSfL https://raw.githubusercontent.com/securecodewarrior/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest
+        # Install gosec from releases
+        GOSEC_VERSION="2.21.4"
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; fi
+        if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
+        
+        curl -sSL "https://github.com/securecodewarrior/gosec/releases/download/v${GOSEC_VERSION}/gosec_${GOSEC_VERSION}_${OS}_${ARCH}.tar.gz" | tar -xz -C $(go env GOPATH)/bin gosec
         
         # Verify installations
         staticcheck -version || echo "staticcheck installation failed"
