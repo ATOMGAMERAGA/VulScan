@@ -6,8 +6,9 @@ We actively support the following versions of VulScan with security updates:
 
 | Version | Supported          | End of Life |
 | ------- | ------------------ | ----------- |
-| 3.x.x   | ✅ **Current**     | TBD         |
-| 2.x.x   | ⚠️ **Maintenance** | 2024-12-31  |
+| 4.x.x   | ✅ **Current**     | TBD         |
+| 3.x.x   | ⚠️ **SC Updates**  | TBD         |
+| 2.x.x   | ❌ **Deprecated**  | 2024-12-31  |
 | 1.x.x   | ❌ **Deprecated**  | 2024-01-01  |
 
 ### Release Support Policy
