@@ -366,19 +366,19 @@ Katkılarınızı bekliyoruz! Lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyas�
 
 ## 📋 Yol Haritası
 
-### v3.1 (Q1 2025) ✅ TAMAMLANDI
+### v3.0.1 (Q1 2025) ✅ TAMAMLANDI
 - [x] REST API desteği
 - [x] Database injection testleri
 - [x] WebSocket güvenlik kontrolleri
 - [x] Docker container desteği
 
-### v3.2 (Q3 2025)
+### v3.0.2 (Q3 2025)
 - [ ] REST API desteği genişletilmesi
 - [ ] Advanced Database injection testleri
 - [ ] WebSocket güvenlik kontrolleri
 - [ ] Kubernetes security scanning
 
-### v4.0 (Q4 2025)
+### v3.2.0 (Q4 2025)
 - [ ] GraphQL güvenlik testleri
 - [ ] Authentication bypass testleri
 - [ ] Business logic flaw detection
