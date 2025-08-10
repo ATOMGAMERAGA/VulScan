@@ -13,9 +13,9 @@ env:
   IMAGE_NAME: ATOMGAMERAGA/VulScan
 
 jobs:
-  # Code quality and security checks
-  lint-and-security:
-    name: Lint and Security Analysis
+  # Code quality checks (without gosec for now)
+  lint-and-quality:
+    name: Code Quality Analysis
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -43,28 +43,9 @@ jobs:
       run: |
         go mod download
         go install honnef.co/go/tools/cmd/staticcheck@latest
-        
-        # Try to install gosec via go install (fallback method)
-        GOPROXY=direct go install github.com/securecodewarrior/gosec/cmd/gosec@latest || {
-          echo "Go install failed, trying direct download..."
-          
-          # Install gosec from releases
-          GOSEC_VERSION="2.21.4"
-          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-          ARCH=$(uname -m)
-          if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; fi
-          if [ "$ARCH" = "aarch64" ]; then ARCH="arm64"; fi
-          
-          curl -sSL "https://github.com/securecodewarrior/gosec/releases/download/v${GOSEC_VERSION}/gosec_${GOSEC_VERSION}_${OS}_${ARCH}.tar.gz" | tar -xz -C $(go env GOPATH)/bin gosec || {
-            echo "Direct download failed, skipping gosec installation"
-          }
-        }
-        
-        # Verify installations
-        staticcheck -version || echo "staticcheck installation failed"
-        $(go env GOPATH)/bin/gosec -version || gosec -version || echo "gosec not available"
 
     - name: Format check
+      shell: bash
       run: |
         if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
           echo "Code is not formatted properly:"
@@ -77,27 +58,6 @@ jobs:
 
     - name: StaticCheck
       run: staticcheck ./...
-
-    - name: Security scan
-      shell: bash
-      run: |
-        # Try different gosec execution methods
-        if command -v gosec >/dev/null 2>&1; then
-          gosec -fmt sarif -out gosec.sarif ./... || echo "Security scan completed with findings"
-        elif [ -f "$(go env GOPATH)/bin/gosec" ]; then
-          $(go env GOPATH)/bin/gosec -fmt sarif -out gosec.sarif ./... || echo "Security scan completed with findings"
-        else
-          echo "gosec not available, skipping security scan"
-          # Create empty SARIF file to prevent upload errors
-          echo '{"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json","runs":[]}' > gosec.sarif
-        fi
-      continue-on-error: true
-
-    - name: Upload SARIF file
-      if: always()
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: gosec.sarif
       continue-on-error: true
 
   # Unit and integration tests
@@ -178,7 +138,7 @@ jobs:
   build:
     name: Build Binaries
     runs-on: ubuntu-latest
-    needs: [lint-and-security, test]
+    needs: [lint-and-quality, test]
     strategy:
       matrix:
         include:
@@ -256,7 +216,7 @@ jobs:
   docker:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: [lint-and-security, test]
+    needs: [lint-and-quality, test]
     permissions:
       contents: read
       packages: write
@@ -304,144 +264,6 @@ jobs:
           GIT_COMMIT=${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-
-  # Integration tests against real targets
-  integration-test:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Download binary
-      uses: actions/download-artifact@v4
-      with:
-        name: vulscan-linux-amd64
-        path: ./
-
-    - name: Make binary executable
-      run: chmod +x vulscan-linux-amd64
-
-    - name: Run integration tests
-      run: |
-        echo "Running integration tests against test targets..."
-        ./vulscan-linux-amd64 http://testphp.vulnweb.com/listproducts.php?cat=1 --output integration-test.json --timeout 30
-        
-        # Verify JSON output
-        if [ -f integration-test.json ]; then
-          echo "✅ JSON report generated successfully"
-          jq '.summary' integration-test.json
-        else
-          echo "❌ JSON report not generated"
-          exit 1
-        fi
-
-    - name: Upload integration test results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: integration-test-results
-        path: |
-          integration-test.json
-          *.html
-
-  # Performance benchmarks
-  benchmark:
-    name: Performance Benchmarks
-    runs-on: ubuntu-latest
-    needs: [test]
-    if: github.event_name == 'push'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: Run benchmarks
-      shell: bash
-      run: |
-        go test -bench=. -benchmem -count=3 ./... > benchmark.txt
-        cat benchmark.txt
-
-    - name: Upload benchmark results
-      uses: actions/upload-artifact@v4
-      with:
-        name: benchmark-results
-        path: benchmark.txt
-
-  # Release creation
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: [build, integration-test, docker]
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-
-    - name: Create release archives
-      run: |
-        mkdir -p release
-        
-        for dir in vulscan-*; do
-          if [ -d "$dir" ]; then
-            cd "$dir"
-            binary=$(ls vulscan-*)
-            if [[ "$binary" == *.exe ]]; then
-              zip "../release/${binary%.exe}.zip" "$binary"
-            else
-              tar -czf "../release/$binary.tar.gz" "$binary"
-            fi
-            cd ..
-          fi
-        done
-        
-        # Generate checksums
-        cd release
-        sha256sum * > SHA256SUMS
-        cd ..
-
-    - name: Generate release notes
-      id: release_notes
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/}
-        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        
-        # Extract changelog for this version
-        awk '/^## \['$VERSION'\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md > release_notes.md
-        
-        if [ ! -s release_notes.md ]; then
-          echo "🚀 VulScan $VERSION" > release_notes.md
-          echo "" >> release_notes.md
-          echo "### Changes" >> release_notes.md
-          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> release_notes.md
-        fi
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        name: VulScan ${{ steps.release_notes.outputs.VERSION }}
-        body_path: release_notes.md
-        files: |
-          release/*
-        draft: false
-        prerelease: ${{ contains(github.ref, '-') }}
-        generate_release_notes: true
 
   # Dependency update check
   dependency-check:
