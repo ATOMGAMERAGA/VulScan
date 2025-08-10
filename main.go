@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +25,7 @@ import (
 
 // Version information
 const (
-	Version = "3.0.1"
+	Version = "3.1.0"
 	Banner  = `
     ██╗   ██╗██╗   ██╗██╗     ███████╗ ██████╗ █████╗ ███╗   ██╗
     ██║   ██║██║   ██║██║     ██╔════╝██╔════╝██╔══██╗████╗  ██║
@@ -1152,9 +1151,8 @@ func (s *Scanner) testCommandInjection(ctx context.Context, baseURL string, para
 			}
 			
 			// Check for time-based injection (commands that cause delays)
-			timeBasedPayloads := []string{"; sleep 5", "| timeout 5", "& ping -n 5 127.0.0.1"}
-			for _, timePayload := range timeBasedPayloads {
-				if strings.Contains(payload, "sleep") || strings.Contains(payload, "ping") {
+			for _, pattern := range []string{"sleep", "ping", "timeout"} {
+				if strings.Contains(payload, pattern) {
 					if responseTime > 4*time.Second {
 						finding := Finding{
 							ID:          fmt.Sprintf("cmdi_time_%s_%d", param, time.Now().Unix()),
