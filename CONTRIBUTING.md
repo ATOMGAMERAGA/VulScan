@@ -103,11 +103,11 @@ Aşağıdaki alanlarda katkıda bulunabilirsiniz:
 
 ```bash
 # 1. Repository'yi fork edin ve klonlayın
-git clone https://github.com/yourusername/vulscan.git
-cd vulscan
+git clone https://github.com/ATOMGAMERAGA/VulScan.git
+cd VulScan
 
 # 2. Upstream remote'u ekleyin
-git remote add upstream https://github.com/originalowner/vulscan.git
+git remote add upstream https://github.com/ATOMGAMERAGA/VulScan.git
 
 # 3. Go modüllerini yükleyin
 go mod download
@@ -435,15 +435,15 @@ Katkıda bulunanlar aşağıdaki şekillerde tanınır:
 
 ### Special Thanks
 - Major contributions için özel teşekkür bölümü
-- Security researchers için hall of fame
+- Security researchers için özel tanınma
 
 ## 📞 İletişim
 
 Sorularınız veya yardıma ihtiyacınız varsa:
 
-- 💬 [GitHub Discussions](https://github.com/yourusername/vulscan/discussions)
-- 📧 Email: security@yourcompany.com
-- 💼 LinkedIn: [VulScan Project](https://linkedin.com/company/vulscan)
+- 💬 [GitHub Discussions](https://github.com/ATOMGAMERAGA/VulScan/discussions)
+- 📧 Email: atomgameraga@atomland.xyz
+- 🐦 Twitter: [@atomgameraga](https://twitter.com/atomgameraga)
 
 ## 📄 Lisans
 
