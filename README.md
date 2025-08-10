@@ -65,6 +65,13 @@ VulScan v3.0.1, modern web uygulamalarında yaygın güvenlik açıklarını tes
 iwr -useb https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/install.ps1 | iex
 ```
 
+**Linux (Önerilen kurulum yöntemi):**
+```bash
+# Otomatik kurulum scripti
+bash <(curl -sSL https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main/safe-install.sh)
+
+```
+
 #### Hızlı Kurulum
 
 ```bash
