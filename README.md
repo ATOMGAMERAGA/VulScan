@@ -1,4 +1,4 @@
-# 🛡️ VulScan v3.0 - Advanced Web Security Scanner
+# 🛡️ VulScan v3.0.1 - Advanced Web Security Scanner
 
 [![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
