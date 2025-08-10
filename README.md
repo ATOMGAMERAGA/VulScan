@@ -210,23 +210,17 @@ Katkılarınızı bekliyoruz! Lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyas�
 
 ## 📋 Yol Haritası
 
-### v3.1 (Q2 2024)
+### v3.1 (Q1 2025)
 - [ ] REST API desteği
 - [ ] Database injection testleri
 - [ ] WebSocket güvenlik kontrolleri
 - [ ] Docker container desteği
 
-### v3.2 (Q3 2024)
+### v3.2 (Q2 2025)
 - [ ] GraphQL güvenlik testleri
 - [ ] Authentication bypass testleri
 - [ ] Business logic flaw detection
 - [ ] Mobile API testing
-
-### v4.0 (Q4 2024)
-- [ ] Machine Learning tabanlı anomali tespiti
-- [ ] Gerçek zamanlı monitoring
-- [ ] Otomatik exploit generation
-- [ ] Cloud security scanning
 
 ## 📚 Dokümantasyon
 
@@ -248,14 +242,15 @@ Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICE
 
 ## 🙏 Teşekkürler
 
-### Katkıda Bulunanlar
-- [@ATOMGAMERAGA](https://github.com/ATOMGAMERAGA) - Project creator and main developer
-- Topluluktan gelecek katkılar burada listelenecek
+### 👨‍💻 Geliştirici
+- **[@ATOMGAMERAGA](https://github.com/ATOMGAMERAGA)** - Proje kurucusu ve geliştirici
 
-### İlham Kaynakları
-- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework)
-- [CWE/SANS Top 25](https://cwe.mitre.org/top25/)
+### 🎯 İlham Kaynakları
+Bu proje aşağıdaki kaynaklar ve standartlardan yararlanarak geliştirilmiştir:
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/) - Web güvenlik açıkları referansı
+- [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework) - Siber güvenlik çerçevesi
+- [CWE/SANS Top 25](https://cwe.mitre.org/top25/) - Yaygın güvenlik açıkları listesi
+- [CVSS v3.1](https://www.first.org/cvss/) - Güvenlik açığı skorlama sistemi
 
 ---
 
