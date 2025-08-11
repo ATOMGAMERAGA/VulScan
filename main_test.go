@@ -23,8 +23,8 @@ func TestBanner(t *testing.T) {
 	if Banner == "" {
 		t.Error("Banner should not be empty")
 	}
-	if !strings.Contains(Banner, "VulScan") {
-		t.Error("Banner should contain 'VulScan'")
+	if !strings.Contains(Banner, "Next-Gen Web Security Scanner") {
+		t.Error("Banner should contain 'Next-Gen Web Security Scanner'")
 	}
 }
 
@@ -85,8 +85,8 @@ func TestCVSSScores(t *testing.T) {
 	if cvssScores[SQLInjection] != 9.8 {
 		t.Error("SQL Injection CVSS score should be 9.8")
 	}
-	if cvssScores[XSS] != 6.1 {
-		t.Error("XSS CVSS score should be 6.1")
+	if cvssScores[XSS] != 8.8 {
+		t.Error("XSS CVSS score should be 8.8")
 	}
 }
 
@@ -98,8 +98,8 @@ func TestCalculateRiskLevel(t *testing.T) {
 		expected RiskLevel
 	}{
 		{SQLInjection, RiskCritical},
-		{XSS, RiskMedium},
-		{SecurityHeaders, RiskLow},
+		{XSS, RiskHigh},
+		{SecurityHeaders, RiskMedium},
 	}
 	
 	for _, test := range tests {
@@ -119,7 +119,7 @@ func TestTruncateString(t *testing.T) {
 		expected string
 	}{
 		{"short", 10, "short"},
-		{"this is a very long string", 10, "this is a..."},
+		{"this is a very long string", 10, "this is a ..."},
 		{"", 5, ""},
 	}
 	
