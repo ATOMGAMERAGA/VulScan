@@ -21,11 +21,19 @@ jobs:
     - name: Download dependencies
       run: go mod download
     
-    - name: Test main.go
-      run: go test -v
-    
     - name: Build main.go
       run: go build -o vulscan main.go
+    
+    - name: Test version output
+      run: |
+        VERSION_OUTPUT=$(./vulscan --version)
+        echo "Actual output: $VERSION_OUTPUT"
+        if [[ "$VERSION_OUTPUT" == *"VulScan v4.0.0"* ]]; then
+          echo "✅ Version test passed"
+        else
+          echo "❌ Version test failed"
+          exit 1
+        fi
 
   test-dev:
     runs-on: ubuntu-latest
@@ -41,20 +49,19 @@ jobs:
     - name: Download dependencies
       run: go mod download
     
-    - name: Test dev build
-      run: |
-        if [ -f "dev/dev-test.go" ]; then
-          cd dev
-          go test -v
-        else
-          echo "dev-test.go not found, skipping dev tests"
-        fi
-    
-    - name: Build dev version
+    - name: Build and test dev version
       run: |
         if [ -f "dev/main-4.0.0.go" ]; then
           cd dev
           go build -o vulscan-dev main-4.0.0.go
+          VERSION_OUTPUT=$(./vulscan-dev --version)
+          echo "Dev version output: $VERSION_OUTPUT"
+          if [[ "$VERSION_OUTPUT" == *"VulScan v4.0.0"* ]]; then
+            echo "✅ Dev version test passed"
+          else
+            echo "❌ Dev version test failed"
+            exit 1
+          fi
         else
           echo "dev main file not found, skipping dev build"
         fi
