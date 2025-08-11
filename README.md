@@ -1,4 +1,4 @@
-# 🛡️ VulScan v3.0.1 - Advanced Web Security Scanner
+# 🛡️ VulScan v4.0.0 - Advanced Web Security Scanner with AI-Powered Detection
 
 [![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
@@ -7,11 +7,13 @@
 
 > **⚡ Gelişmiş, hızlı ve kapsamlı web güvenlik açığı tarayıcısı**
 
-VulScan v3.0.1, modern web uygulamalarında yaygın güvenlik açıklarını tespit eden, CVSS skorlaması yapan ve detaylı raporlar üreten açık kaynak güvenlik tarama aracıdır.
+VulScan v4.0.0, modern web uygulamalarında yaygın güvenlik açıklarını tespit eden, CVSS skorlaması yapan ve detaylı raporlar üreten açık kaynak güvenlik tarama aracıdır. Yeni sürümde AI destekli tespit algoritmaları ve genişletilmiş güvenlik açığı kütüphanesi bulunmaktadır.
 
 ## 🌟 Özellikler
 
 ### 🔍 Kapsamlı Güvenlik Taraması
+
+#### 🎯 Temel Güvenlik Açıkları
 - **SQL Injection** - Klasik, Blind ve Time-based SQL Injection tespiti
 - **Cross-Site Scripting (XSS)** - Reflected, Stored ve DOM tabanlı XSS
 - **Directory Traversal/LFI** - Yerel ve uzak dosya dahil etme açıkları
@@ -21,6 +23,8 @@ VulScan v3.0.1, modern web uygulamalarında yaygın güvenlik açıklarını tes
 - **HTTP Security Headers** - 15+ güvenlik başlığı analizi
 - **SSL/TLS Configuration** - TLS 1.3 desteği ve cipher suite analizi
 - **Cookie Security** - SameSite, Secure, HttpOnly kontrolleri
+
+#### 🆕 Gelişmiş Güvenlik Açıkları (v4.0.0)
 - **Authentication Bypass** - Session ve JWT güvenlik testleri
 - **API Security** - REST ve GraphQL endpoint güvenliği
 - **Command Injection** - OS komut enjeksiyon testleri
@@ -28,7 +32,7 @@ VulScan v3.0.1, modern web uygulamalarında yaygın güvenlik açıklarını tes
 - **Server-Side Request Forgery (SSRF)** - Sunucu taraflı istek sahteciliği
 - **Insecure Direct Object References (IDOR)** - Yetkisiz nesne erişimi
 
-### 📊 Gelişmiş Raporlama
+### 📊 Gelişmiş Raporlama & AI Destekli Analiz
 - **CVSS v3.1 Skorlaması** - Endüstri standardı risk değerlendirmesi
 - **Multi-format Export** - JSON, HTML, PDF, XML çıktı desteği
 - **Interactive Dashboard** - Web tabanlı görsel raporlar
@@ -36,6 +40,9 @@ VulScan v3.0.1, modern web uygulamalarında yaygın güvenlik açıklarını tes
 - **Executive Summary** - Yönetici düzeyi risk raporları
 - **Remediation Guide** - Kod örnekleri ile detaylı çözümler
 - **Trend Analysis** - Zamansal güvenlik açığı analizi
+- **🆕 AI-Powered Pattern Recognition** - Gelişmiş tespit algoritmaları
+- **🆕 Enhanced Payload Library** - Genişletilmiş saldırı vektörleri
+- **🆕 Modern Web Tech Support** - GraphQL, JWT, API güvenliği
 
 ### ⚡ Performans & Kullanılabilirlik
 - **Paralel Tarama** - Çoklu thread desteği (1-100 thread)
@@ -111,6 +118,12 @@ chmod +x vulscan
 # Çoklu format rapor oluşturma
 ./vulscan http://example.com --output report.json --report
 
+# API endpoint taraması
+./vulscan -v http://api.example.com/v1/users
+
+# GraphQL endpoint taraması
+./vulscan -v http://example.com/graphql
+
 # Yardım ve sürüm bilgisi
 ./vulscan --help
 ./vulscan --version
@@ -128,7 +141,7 @@ chmod +x vulscan
 | `--threads` | `-t` | Paralel thread sayısı | 5 |
 | `--timeout` | | İstek zaman aşımı (saniye) | 10 |
 | `--output` | `-o` | JSON çıktı dosyası | - |
-| `--user-agent` | `-u` | Özel User-Agent | VulScan/3.0.1 |
+| `--user-agent` | `-u` | Özel User-Agent | VulScan/4.0.0 |
 | `--report` | | HTML rapor oluştur | false |
 | `--format` | `-f` | Rapor formatı (html,pdf,json) | json |
 | `--proxy` | | HTTP/HTTPS proxy | - |
@@ -207,7 +220,7 @@ chmod +x vulscan
   "scan_info": {
     "target": "https://example.com",
     "timestamp": "2025-08-10T14:30:00Z",
-    "version": "VulScan v3.0.1",
+    "version": "VulScan v4.0.0",
     "duration": "2m15s",
     "options": {
       "threads": 10,
@@ -379,7 +392,7 @@ Katkılarınızı bekliyoruz! Lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyas�
 
 ## 📋 Yol Haritası
 
-### v3.1 (Q1 2025) ✅ TAMAMLANDI
+### v4.0 (Q4 2024) ✅ TAMAMLANDI
 - [x] REST API desteği
 - [x] Database injection testleri
 - [x] WebSocket güvenlik kontrolleri

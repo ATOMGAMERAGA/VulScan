@@ -206,6 +206,7 @@ license.*
 *.deb
 *.rpm
 *.msi
+*.exe
 
 # Compiled documentation
 *.pdf

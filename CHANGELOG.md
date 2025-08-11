@@ -10,11 +10,47 @@ Changelog formatı [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) stan
 - REST API desteği
 - Database injection testleri
 - WebSocket güvenlik kontrolleri
-- Docker container desteği
-- GraphQL güvenlik testleri
-- Authentication bypass testleri
-- Business logic flaw detection
 - Mobile API testing
+- Advanced machine learning detection
+
+## [4.0.0] - 2024-12-19
+
+### 🚀 Büyük Özellikler
+- **AI-Powered Detection** - Gelişmiş yapay zeka destekli güvenlik açığı tespiti
+- **Modern Web Technologies Support** - GraphQL, JWT, API güvenliği
+- **Enhanced Payload Library** - Genişletilmiş saldırı vektörleri ve bypass teknikleri
+- **Advanced Pattern Recognition** - Gelişmiş tespit algoritmaları
+
+### 🆕 Yeni Güvenlik Açığı Testleri
+- **XXE (XML External Entity)** - XML enjeksiyon açıkları tespiti
+- **SSRF (Server-Side Request Forgery)** - Sunucu tarafı istek sahteciliği
+- **JWT Security Issues** - JSON Web Token güvenlik açıkları ve yanlış yapılandırmalar
+- **GraphQL Security** - GraphQL introspection ve bilgi sızıntısı
+- **API Endpoints Discovery** - Açık API dokümantasyonu ve endpoint tespiti
+- **IDOR (Insecure Direct Object References)** - Güvensiz nesne referansları
+- **Authentication Bypass** - Kimlik doğrulama atlama teknikleri
+- **Business Logic Flaws** - İş mantığı açıkları
+- **Rate Limiting Bypass** - Hız sınırlama atlama
+- **CORS Misconfiguration** - CORS yanlış yapılandırması
+
+### 🔧 Gelişmiş SQL Injection Payloads
+- Information schema enumeration
+- Error-based injection techniques
+- Time-based blind injection
+- Advanced bypass methods
+- Union-based data extraction
+
+### 📊 Gelişmiş Raporlama
+- Yeni güvenlik açığı türleri için CWE mapping
+- CVSS v3.1 skorları güncellendi
+- Gelişmiş HTML rapor şablonu
+- Detaylı evidence ve çözüm önerileri
+
+### ⚡ Performans İyileştirmeleri
+- Paralel tarama optimizasyonu
+- Gelişmiş hata yönetimi
+- Daha hızlı payload işleme
+- Optimize edilmiş HTTP istekleri
 
 ## [3.0.0] - 2024-01-15
 

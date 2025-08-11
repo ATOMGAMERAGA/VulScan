@@ -377,7 +377,7 @@ func (v *VulScan) DetectSQLInjection(targetURL string, params map[string]string)
 Yeni özellik eklediğinizde README.md'yi güncelleyin:
 
 ```markdown
-### 🆕 v3.1.0 Updates
+### 🆕 v4.0.0 Updates
 - ✨ XXE vulnerability detection
 - 🚀 Performance improvements (40% faster scanning)
 - 📊 Enhanced HTML reports with charts
@@ -396,7 +396,7 @@ Yeni özellik eklediğinizde README.md'yi güncelleyin:
 ### Changelog Format
 
 ```markdown
-## [3.1.0] - 2024-01-15
+## [4.0.0] - 2024-12-19
 
 ### Added ✨
 - XXE vulnerability detection
