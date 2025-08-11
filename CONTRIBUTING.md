@@ -56,7 +56,7 @@ Bir hata bulduğunuzda:
    **Ortam:**
    - İşletim Sistemi: [örn. Ubuntu 22.04]
    - Go Version: [örn. 1.21.0]
-   - VulScan Version: [örn. v3.0.0]
+   - VulScan Version: [örn. v4.1.0]
    
    **Ek Bilgiler:**
    Ekran görüntüleri, loglar vb.

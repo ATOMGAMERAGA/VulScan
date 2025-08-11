@@ -9,9 +9,33 @@ Changelog formatı [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) stan
 ### Planlanan
 - REST API desteği
 - Database injection testleri
-- WebSocket güvenlik kontrolleri
 - Mobile API testing
 - Advanced machine learning detection
+
+## [4.1.0] - 2024-12-20
+
+### 🚀 Yeni Özellikler
+- **WebSocket Security Testing** - WebSocket bağlantıları için güvenlik testleri
+- **Subdomain Enumeration** - Alt domain keşfi ve güvenlik analizi
+- **Technology Fingerprinting** - Web teknolojisi tespit ve analizi
+- **Backup Files Detection** - Yedek dosya tespiti ve analizi
+
+### 🔧 İyileştirmeler
+- Gelişmiş payload kütüphanesi
+- Daha hızlı tarama algoritmaları
+- Gelişmiş hata yönetimi
+- Kod yapısı optimizasyonları
+
+### 🐛 Hata Düzeltmeleri
+- Struct field uyumsuzlukları düzeltildi
+- Function parameter sıralaması düzeltildi
+- Type mismatch hataları giderildi
+- Compilation errors çözüldü
+
+### 📊 Güncellenen Bileşenler
+- Test dosyaları güncellendi
+- Install scriptleri güncellendi
+- Dokümantasyon güncellendi
 
 ## [4.0.0] - 2024-12-19
 

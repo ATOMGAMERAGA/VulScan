@@ -66,7 +66,7 @@ if "%version_choice%"=="1" (
     echo [INFO] Stable Release seçildi
 ) else if "%version_choice%"=="2" (
     set "DOWNLOAD_URL=https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/dev/main-4.0.0.go"
-set "VERSION_TAG=v4.0.0-dev"
+set "VERSION_TAG=v4.1.0-dev"
     echo [INFO] Development Release seçildi
 ) else if "%version_choice%"=="3" (
     goto :manual_setup

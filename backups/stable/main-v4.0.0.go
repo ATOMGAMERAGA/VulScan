@@ -25,7 +25,7 @@ import (
 
 // Version information
 const (
-	Version = "4.1.0"
+	Version = "4.0.0"
 	Banner  = `
     ██╗   ██╗██╗   ██╗██╗     ███████╗ ██████╗ █████╗ ███╗   ██╗
     ██║   ██║██║   ██║██║     ██╔════╝██╔════╝██╔══██╗████╗  ██║
@@ -35,8 +35,7 @@ const (
       ╚═══╝   ╚═════╝ ╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝
     
     🚀 Next-Gen Web Security Scanner v%s
-    🔥 Enhanced with AI-Powered Detection & Advanced Reconnaissance
-    💡 New: WebSocket Security, Subdomain Enum, Tech Fingerprinting
+    🔥 Enhanced with AI-Powered Detection
     Developed with ❤️  by ATOMGAMERAGA
     `
 )
@@ -76,17 +75,6 @@ const (
 	BusinessLogic    VulnType = "BUSINESS_LOGIC"
 	RateLimiting     VulnType = "RATE_LIMITING"
 	CORS             VulnType = "CORS"
-	// New v4.1.0 vulnerability types
-	WebSocketSecurity VulnType = "WEBSOCKET_SECURITY"
-	SubdomainEnum     VulnType = "SUBDOMAIN_ENUMERATION"
-	TechFingerprint   VulnType = "TECHNOLOGY_FINGERPRINTING"
-	APIVersioning     VulnType = "API_VERSIONING"
-	ContentSecurity   VulnType = "CONTENT_SECURITY_POLICY"
-	Clickjacking      VulnType = "CLICKJACKING"
-	HostHeaderInject  VulnType = "HOST_HEADER_INJECTION"
-	HTTPMethodTest    VulnType = "HTTP_METHOD_TESTING"
-	BackupFiles       VulnType = "BACKUP_FILES"
-	RobotsTxt         VulnType = "ROBOTS_TXT_ANALYSIS"
 )
 
 // Configuration structure
@@ -96,52 +84,18 @@ type Config struct {
 		Timeout   int    `yaml:"timeout"`
 		UserAgent string `yaml:"user_agent"`
 		RateLimit int    `yaml:"rate_limit"`
-		// New v4.1.0 scan options
-		EnableSubdomainEnum bool `yaml:"enable_subdomain_enum"`
-		EnableWebSocketTest bool `yaml:"enable_websocket_test"`
-		EnableTechFingerprint bool `yaml:"enable_tech_fingerprint"`
-		EnableBackupFilesScan bool `yaml:"enable_backup_files_scan"`
-		MaxSubdomains int `yaml:"max_subdomains"`
 	} `yaml:"scan"`
 	Payloads struct {
 		SQLInjection     string `yaml:"sql_injection"`
 		XSS              string `yaml:"xss"`
 		DirectoryTraversal string `yaml:"directory_traversal"`
 		CommandInjection string `yaml:"command_injection"`
-		// New v4.1.0 payload files
-		WebSocketPayloads string `yaml:"websocket_payloads"`
-		SubdomainWordlist string `yaml:"subdomain_wordlist"`
-		BackupFilesList   string `yaml:"backup_files_list"`
 	} `yaml:"payloads"`
 	Output struct {
 		Verbose bool   `yaml:"verbose"`
 		Format  string `yaml:"format"`
 		Report  bool   `yaml:"report"`
-		// New v4.1.0 output options
-		IncludeSubdomains bool `yaml:"include_subdomains"`
-		IncludeTechStack  bool `yaml:"include_tech_stack"`
-		DetailedReporting bool `yaml:"detailed_reporting"`
 	} `yaml:"output"`
-	// New v4.1.0 configuration sections
-	SubdomainEnum struct {
-		DNSServers []string `yaml:"dns_servers"`
-		WordlistPath string `yaml:"wordlist_path"`
-		MaxDepth int `yaml:"max_depth"`
-		Timeout int `yaml:"timeout"`
-	} `yaml:"subdomain_enum"`
-	WebSocket struct {
-		TestUpgrade bool `yaml:"test_upgrade"`
-		TestOrigin bool `yaml:"test_origin"`
-		TestProtocols []string `yaml:"test_protocols"`
-		Timeout int `yaml:"timeout"`
-	} `yaml:"websocket"`
-	TechFingerprint struct {
-		CheckHeaders bool `yaml:"check_headers"`
-		CheckCookies bool `yaml:"check_cookies"`
-		CheckHTML bool `yaml:"check_html"`
-		CheckJS bool `yaml:"check_js"`
-		CheckCSS bool `yaml:"check_css"`
-	} `yaml:"tech_fingerprint"`
 }
 
 // Vulnerability finding structure
@@ -364,98 +318,6 @@ var payloads = map[VulnType][]string{
 		"*",
 		"https://attacker.evil.com",
 	},
-	WebSocketSecurity: {
-		"ws://127.0.0.1:8080",
-		"wss://evil.com",
-		"ws://localhost:3000",
-		"wss://attacker.com/ws",
-		"ws://[::1]:8080",
-	},
-	SubdomainEnum: {
-		"admin",
-		"api",
-		"dev",
-		"test",
-		"staging",
-		"www",
-		"mail",
-		"ftp",
-		"blog",
-		"shop",
-	},
-	TechFingerprint: {
-		"/robots.txt",
-		"/sitemap.xml",
-		"/favicon.ico",
-		"/.well-known/security.txt",
-		"/wp-admin/",
-		"/admin/",
-		"/phpmyadmin/",
-		"/server-status",
-		"/server-info",
-		"/.git/config",
-	},
-	APIVersioning: {
-		"/api/v1/",
-		"/api/v2/",
-		"/v1/",
-		"/v2/",
-		"/rest/v1/",
-		"/graphql/v1",
-		"/api/version",
-		"/version",
-	},
-	ContentSecurity: {
-		"<script>alert('CSP')</script>",
-		"<img src=x onerror=alert('CSP')>",
-		"javascript:alert('CSP')",
-		"data:text/html,<script>alert('CSP')</script>",
-		"'unsafe-inline'",
-		"'unsafe-eval'",
-	},
-	Clickjacking: {
-		"<iframe src='https://target.com'></iframe>",
-		"<frame src='https://target.com'></frame>",
-		"<object data='https://target.com'></object>",
-		"<embed src='https://target.com'></embed>",
-	},
-	HostHeaderInject: {
-		"evil.com",
-		"localhost",
-		"127.0.0.1",
-		"attacker.com",
-		"[::1]",
-		"0.0.0.0",
-	},
-	HTTPMethodTest: {
-		"OPTIONS",
-		"TRACE",
-		"TRACK",
-		"DEBUG",
-		"CONNECT",
-		"PATCH",
-		"PROPFIND",
-		"PROPPATCH",
-	},
-	BackupFiles: {
-		".bak",
-		".backup",
-		".old",
-		".orig",
-		".tmp",
-		".save",
-		"~",
-		".swp",
-		".swo",
-		".DS_Store",
-	},
-	RobotsTxt: {
-		"/robots.txt",
-		"/sitemap.xml",
-		"/sitemap_index.xml",
-		"/sitemaps.xml",
-		"/sitemap/",
-	},
 }
 
 // CWE mappings for vulnerability types
@@ -480,16 +342,6 @@ var cweMapping = map[VulnType]string{
 	BusinessLogic:    "CWE-840",
 	RateLimiting:     "CWE-770",
 	CORS:             "CWE-942",
-	WebSocketSecurity: "CWE-346",
-	SubdomainEnum:     "CWE-200",
-	TechFingerprint:   "CWE-200",
-	APIVersioning:     "CWE-200",
-	ContentSecurity:   "CWE-693",
-	Clickjacking:      "CWE-1021",
-	HostHeaderInject:  "CWE-20",
-	HTTPMethodTest:    "CWE-200",
-	BackupFiles:       "CWE-200",
-	RobotsTxt:         "CWE-200",
 }
 
 // CVSS scores for different vulnerability types
@@ -514,108 +366,41 @@ var cvssScores = map[VulnType]float64{
 	BusinessLogic:    7.1, // High
 	RateLimiting:     4.9, // Medium
 	CORS:             6.8, // Medium
-	WebSocketSecurity: 7.2, // High
-	SubdomainEnum:     3.1, // Low
-	TechFingerprint:   3.7, // Low
-	APIVersioning:     4.2, // Medium
-	ContentSecurity:   6.5, // Medium
-	Clickjacking:      6.1, // Medium
-	HostHeaderInject:  5.8, // Medium
-	HTTPMethodTest:    3.9, // Low
-	BackupFiles:       5.5, // Medium
-	RobotsTxt:         2.8, // Low
 }
 
 // Default configuration
 func getDefaultConfig() *Config {
 	return &Config{
 		Scan: struct {
-			Threads                int  `yaml:"threads"`
-			Timeout                int  `yaml:"timeout"`
-			UserAgent              string `yaml:"user_agent"`
-			RateLimit              int  `yaml:"rate_limit"`
-			EnableSubdomainEnum    bool `yaml:"enable_subdomain_enum"`
-			EnableWebSocketTest    bool `yaml:"enable_websocket_test"`
-			EnableTechFingerprint  bool `yaml:"enable_tech_fingerprint"`
-			EnableBackupFilesScan  bool `yaml:"enable_backup_files_scan"`
-			MaxSubdomains          int  `yaml:"max_subdomains"`
+			Threads   int    `yaml:"threads"`
+			Timeout   int    `yaml:"timeout"`
+			UserAgent string `yaml:"user_agent"`
+			RateLimit int    `yaml:"rate_limit"`
 		}{
-			Threads:                5,
-			Timeout:                10,
-			UserAgent:              fmt.Sprintf("VulScan/%s", Version),
-			RateLimit:              10,
-			EnableSubdomainEnum:    true,
-			EnableWebSocketTest:    true,
-			EnableTechFingerprint:  true,
-			EnableBackupFilesScan:  true,
-			MaxSubdomains:          50,
+			Threads:   5,
+			Timeout:   10,
+			UserAgent: fmt.Sprintf("VulScan/%s", Version),
+			RateLimit: 10,
 		},
 		Payloads: struct {
-			SQLInjection       string `yaml:"sql_injection"`
-			XSS                string `yaml:"xss"`
+			SQLInjection     string `yaml:"sql_injection"`
+			XSS              string `yaml:"xss"`
 			DirectoryTraversal string `yaml:"directory_traversal"`
-			CommandInjection   string `yaml:"command_injection"`
-			WebSocketPayloads  string `yaml:"websocket_payloads"`
-			SubdomainWordlist  string `yaml:"subdomain_wordlist"`
-			BackupFilesList    string `yaml:"backup_files_list"`
+			CommandInjection string `yaml:"command_injection"`
 		}{
-			SQLInjection:       "payloads/sql.txt",
-			XSS:                "payloads/xss.txt",
+			SQLInjection:     "payloads/sql.txt",
+			XSS:              "payloads/xss.txt",
 			DirectoryTraversal: "payloads/lfi.txt",
-			CommandInjection:   "payloads/cmd.txt",
-			WebSocketPayloads:  "payloads/websocket.txt",
-			SubdomainWordlist:  "payloads/subdomains.txt",
-			BackupFilesList:    "payloads/backup.txt",
+			CommandInjection: "payloads/cmd.txt",
 		},
 		Output: struct {
-			Verbose           bool `yaml:"verbose"`
-			Format            string `yaml:"format"`
-			Report            bool `yaml:"report"`
-			IncludeSubdomains bool `yaml:"include_subdomains"`
-			IncludeTechStack  bool `yaml:"include_tech_stack"`
-			DetailedReporting bool `yaml:"detailed_reporting"`
+			Verbose bool   `yaml:"verbose"`
+			Format  string `yaml:"format"`
+			Report  bool   `yaml:"report"`
 		}{
-			Verbose:           false,
-			Format:            "json",
-			Report:            false,
-			IncludeSubdomains: true,
-			IncludeTechStack:  true,
-			DetailedReporting: false,
-		},
-		SubdomainEnum: struct {
-			DNSServers   []string `yaml:"dns_servers"`
-			WordlistPath string   `yaml:"wordlist_path"`
-			MaxDepth     int      `yaml:"max_depth"`
-			Timeout      int      `yaml:"timeout"`
-		}{
-			DNSServers:   []string{"8.8.8.8", "1.1.1.1"},
-			WordlistPath: "wordlists/subdomains.txt",
-			MaxDepth:     3,
-			Timeout:      30,
-		},
-		WebSocket: struct {
-			TestUpgrade   bool     `yaml:"test_upgrade"`
-			TestOrigin    bool     `yaml:"test_origin"`
-			TestProtocols []string `yaml:"test_protocols"`
-			Timeout       int      `yaml:"timeout"`
-		}{
-			TestUpgrade:   true,
-			TestOrigin:    true,
-			TestProtocols: []string{"chat", "echo-protocol"},
-			Timeout:       30,
-		},
-		TechFingerprint: struct {
-			CheckHeaders bool `yaml:"check_headers"`
-			CheckCookies bool `yaml:"check_cookies"`
-			CheckHTML    bool `yaml:"check_html"`
-			CheckJS      bool `yaml:"check_js"`
-			CheckCSS     bool `yaml:"check_css"`
-		}{
-			CheckHeaders: true,
-			CheckCookies: true,
-			CheckHTML:    true,
-			CheckJS:      true,
-			CheckCSS:     true,
+			Verbose: false,
+			Format:  "json",
+			Report:  false,
 		},
 	}
 }
@@ -1274,105 +1059,7 @@ func (s *Scanner) Scan(ctx context.Context, targetURL string) (*ScanResult, erro
 		defer func() { <-semaphore }()
 		s.testCORS(ctx, targetURL)
 	}()
-
-	// Test WebSocket Security (v4.1 feature)
-	if s.config.Scan.EnableWebSocketTest {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			s.testWebSocketSecurity(ctx, targetURL)
-		}()
-	}
-
-	// Test Subdomain Enumeration (v4.1 feature)
-	if s.config.Scan.EnableSubdomainEnum {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			s.testSubdomainEnumeration(ctx, targetURL)
-		}()
-	}
-
-	// Test Technology Fingerprinting (v4.1 feature)
-	if s.config.Scan.EnableTechFingerprint {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			s.testTechnologyFingerprinting(ctx, targetURL)
-		}()
-	}
-
-	// Test Backup Files Scanning (v4.1 feature)
-	if s.config.Scan.EnableBackupFilesScan {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			s.testBackupFiles(ctx, targetURL)
-		}()
-	}
-
-	// Test API Versioning (v4.1 feature)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		semaphore <- struct{}{}
-		defer func() { <-semaphore }()
-		s.testAPIVersioning(ctx, targetURL)
-	}()
-
-	// Test Content Security Policy (v4.1 feature)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		semaphore <- struct{}{}
-		defer func() { <-semaphore }()
-		s.testContentSecurityPolicy(ctx, targetURL)
-	}()
-
-	// Test Clickjacking (v4.1 feature)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		semaphore <- struct{}{}
-		defer func() { <-semaphore }()
-		s.testClickjacking(ctx, targetURL)
-	}()
-
-	// Test Host Header Injection (v4.1 feature)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		semaphore <- struct{}{}
-		defer func() { <-semaphore }()
-		s.testHostHeaderInjection(ctx, targetURL)
-	}()
-
-	// Test HTTP Methods (v4.1 feature)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		semaphore <- struct{}{}
-		defer func() { <-semaphore }()
-		s.testHTTPMethods(ctx, targetURL)
-	}()
-
-	// Test Robots.txt Analysis (v4.1 feature)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		semaphore <- struct{}{}
-		defer func() { <-semaphore }()
-		s.testRobotsTxt(ctx, targetURL)
-	}()
-
+	
 	// Wait for all tests to complete
 	wg.Wait()
 	
@@ -2102,425 +1789,6 @@ func (s *Scanner) testCORS(ctx context.Context, targetURL string) {
 	}
 }
 
-// Test WebSocket Security
-func (s *Scanner) testWebSocketSecurity(ctx context.Context, targetURL string) {
-	if !s.config.Scan.EnableWebSocketTest {
-		return
-	}
-
-	// Convert HTTP(S) URL to WebSocket URL
-	wsURL := strings.Replace(targetURL, "http://", "ws://", 1)
-	wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
-
-	for _, payload := range payloads[WebSocketSecurity] {
-		testURL := wsURL + "/" + payload
-		
-		// Test WebSocket connection
-		resp, err := s.makeRequest(ctx, "GET", testURL, nil, map[string]string{
-			"Upgrade":    "websocket",
-			"Connection": "Upgrade",
-			"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-			"Sec-WebSocket-Version": "13",
-		})
-		
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		
-		if resp.StatusCode == 101 { // WebSocket upgrade successful
-			finding := Finding{
-				ID:          fmt.Sprintf("websocket-%d", time.Now().UnixNano()),
-				Type:        WebSocketSecurity,
-				Severity:    s.calculateRiskLevel(WebSocketSecurity),
-				CVSS:        cvssScores[WebSocketSecurity],
-				CWE:         cweMapping[WebSocketSecurity],
-				Title:       "WebSocket Endpoint Discovered",
-				Description: "WebSocket endpoint found that may be vulnerable to attacks",
-				URL:         testURL,
-				Payload:     payload,
-				Evidence:    fmt.Sprintf("WebSocket upgrade successful: %d", resp.StatusCode),
-				Solution:    "Implement proper WebSocket security measures including authentication and input validation",
-				References: []string{
-					"https://owasp.org/www-community/attacks/WebSocket_attacks",
-					"https://cwe.mitre.org/data/definitions/346.html",
-				},
-				Confidence: 75,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
-// Test Subdomain Enumeration
-func (s *Scanner) testSubdomainEnumeration(ctx context.Context, targetURL string) {
-	if !s.config.Scan.EnableSubdomainEnum {
-		return
-	}
-
-	parsedURL, err := url.Parse(targetURL)
-	if err != nil {
-		return
-	}
-
-	baseDomain := parsedURL.Hostname()
-	for _, subdomain := range payloads[SubdomainEnum] {
-		testDomain := subdomain + "." + baseDomain
-		testURL := parsedURL.Scheme + "://" + testDomain + parsedURL.Path
-		
-		resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		
-		if resp.StatusCode == 200 {
-			finding := Finding{
-				ID:          fmt.Sprintf("subdomain-%d", time.Now().UnixNano()),
-				Type:        SubdomainEnum,
-				Severity:    s.calculateRiskLevel(SubdomainEnum),
-				CVSS:        cvssScores[SubdomainEnum],
-				CWE:         cweMapping[SubdomainEnum],
-				Title:       "Subdomain Discovered",
-				Description: "Active subdomain found that may expose additional attack surface",
-				URL:         testURL,
-				Payload:     subdomain,
-				Evidence:    fmt.Sprintf("Subdomain %s is accessible", testDomain),
-				Solution:    "Review subdomain exposure and ensure proper security controls",
-				References: []string{
-					"https://owasp.org/www-community/attacks/Subdomain_Takeover",
-				},
-				Confidence: 90,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
-// Test Technology Fingerprinting
-func (s *Scanner) testTechnologyFingerprinting(ctx context.Context, targetURL string) {
-	if !s.config.Scan.EnableTechFingerprint {
-		return
-	}
-
-	for _, path := range payloads[TechFingerprint] {
-		testURL := strings.TrimSuffix(targetURL, "/") + path
-		
-		resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		
-		if resp.StatusCode == 200 {
-			body, _ := io.ReadAll(resp.Body)
-			finding := Finding{
-				ID:          fmt.Sprintf("techfp-%d", time.Now().UnixNano()),
-				Type:        TechFingerprint,
-				Severity:    s.calculateRiskLevel(TechFingerprint),
-				CVSS:        cvssScores[TechFingerprint],
-				CWE:         cweMapping[TechFingerprint],
-				Title:       "Technology Information Disclosure",
-				Description: "Technology fingerprinting endpoint found that reveals system information",
-				URL:         testURL,
-				Payload:     path,
-				Evidence:    s.truncateString(string(body), 200),
-				Solution:    "Remove or restrict access to technology disclosure endpoints",
-				References: []string{
-					"https://owasp.org/www-community/attacks/Fingerprinting",
-				},
-				Confidence: 85,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
-// Test Backup Files
-func (s *Scanner) testBackupFiles(ctx context.Context, targetURL string) {
-	if !s.config.Scan.EnableBackupFilesScan {
-		return
-	}
-
-	parsedURL, err := url.Parse(targetURL)
-	if err != nil {
-		return
-	}
-
-	basePath := parsedURL.Path
-	if basePath == "" || basePath == "/" {
-		basePath = "/index"
-	}
-
-	for _, extension := range payloads[BackupFiles] {
-		testURL := strings.TrimSuffix(targetURL, "/") + basePath + extension
-		
-		resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		
-		if resp.StatusCode == 200 {
-			finding := Finding{
-				ID:          fmt.Sprintf("backup-%d", time.Now().UnixNano()),
-				Type:        BackupFiles,
-				Severity:    s.calculateRiskLevel(BackupFiles),
-				CVSS:        cvssScores[BackupFiles],
-				CWE:         cweMapping[BackupFiles],
-				Title:       "Backup File Accessible",
-				Description: "Backup file found that may contain sensitive information",
-				URL:         testURL,
-				Payload:     extension,
-				Evidence:    fmt.Sprintf("Backup file accessible: %s", testURL),
-				Solution:    "Remove backup files from web-accessible directories",
-				References: []string{
-					"https://owasp.org/www-community/vulnerabilities/Backup_file_disclosure",
-				},
-				Confidence: 95,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
-// Test API Versioning vulnerabilities (v4.1 feature)
-func (s *Scanner) testAPIVersioning(ctx context.Context, targetURL string) {
-	for _, payload := range payloads[APIVersioning] {
-		testURL := strings.TrimSuffix(targetURL, "/") + payload
-		
-		resp, err := s.makeRequest(ctx, "GET", testURL, nil, nil)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		
-		body, _ := io.ReadAll(resp.Body)
-		bodyStr := string(body)
-		
-		if resp.StatusCode == 200 && (strings.Contains(bodyStr, "version") || strings.Contains(bodyStr, "api")) {
-			finding := Finding{
-				ID:          fmt.Sprintf("api-version-%d", time.Now().UnixNano()),
-				Type:        APIVersioning,
-				Severity:    s.calculateRiskLevel(APIVersioning),
-				CVSS:        cvssScores[APIVersioning],
-				CWE:         cweMapping[APIVersioning],
-				Title:       "API Version Information Disclosure",
-				Description: "API version information exposed",
-				URL:         testURL,
-				Payload:     payload,
-				Evidence:    s.truncateString(bodyStr, 200),
-				Solution:    "Hide API version information from public endpoints",
-				References: []string{
-					"https://owasp.org/www-project-api-security/",
-				},
-				Confidence: 85,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
-// Test Content Security Policy (v4.1 feature)
-func (s *Scanner) testContentSecurityPolicy(ctx context.Context, targetURL string) {
-	resp, err := s.makeRequest(ctx, "GET", targetURL, nil, nil)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	
-	csp := resp.Header.Get("Content-Security-Policy")
-	if csp == "" {
-		finding := Finding{
-			ID:          fmt.Sprintf("csp-missing-%d", time.Now().UnixNano()),
-			Type:        ContentSecurity,
-			Severity:    s.calculateRiskLevel(ContentSecurity),
-			CVSS:        cvssScores[ContentSecurity],
-			CWE:         cweMapping[ContentSecurity],
-			Title:       "Missing Content Security Policy",
-			Description: "Content Security Policy header is missing",
-			URL:         targetURL,
-			Evidence:    "CSP header not found",
-			Solution:    "Implement Content Security Policy header",
-			References: []string{
-				"https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP",
-			},
-			Confidence: 95,
-			Timestamp:  time.Now(),
-		}
-		s.addFinding(finding)
-	} else if strings.Contains(csp, "unsafe-inline") || strings.Contains(csp, "unsafe-eval") {
-		finding := Finding{
-			ID:          fmt.Sprintf("csp-weak-%d", time.Now().UnixNano()),
-			Type:        ContentSecurity,
-			Severity:    RiskMedium,
-			CVSS:        cvssScores[ContentSecurity],
-			CWE:         cweMapping[ContentSecurity],
-			Title:       "Weak Content Security Policy",
-			Description: "CSP contains unsafe directives",
-			URL:         targetURL,
-			Evidence:    fmt.Sprintf("CSP: %s", csp),
-			Solution:    "Remove unsafe-inline and unsafe-eval from CSP",
-			References: []string{
-				"https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP",
-			},
-			Confidence: 90,
-			Timestamp:  time.Now(),
-		}
-		s.addFinding(finding)
-	}
-}
-
-// Test Clickjacking vulnerabilities (v4.1 feature)
-func (s *Scanner) testClickjacking(ctx context.Context, targetURL string) {
-	resp, err := s.makeRequest(ctx, "GET", targetURL, nil, nil)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	
-	xFrameOptions := resp.Header.Get("X-Frame-Options")
-	if xFrameOptions == "" {
-		finding := Finding{
-			ID:          fmt.Sprintf("clickjacking-%d", time.Now().UnixNano()),
-			Type:        Clickjacking,
-			Severity:    s.calculateRiskLevel(Clickjacking),
-			CVSS:        cvssScores[Clickjacking],
-			CWE:         cweMapping[Clickjacking],
-			Title:       "Clickjacking Vulnerability",
-			Description: "X-Frame-Options header is missing",
-			URL:         targetURL,
-			Evidence:    "X-Frame-Options header not found",
-			Solution:    "Add X-Frame-Options: DENY or SAMEORIGIN header",
-			References: []string{
-				"https://owasp.org/www-community/attacks/Clickjacking",
-			},
-			Confidence: 85,
-			Timestamp:  time.Now(),
-		}
-		s.addFinding(finding)
-	}
-}
-
-// Test Host Header Injection (v4.1 feature)
-func (s *Scanner) testHostHeaderInjection(ctx context.Context, targetURL string) {
-	for _, payload := range payloads[HostHeaderInject] {
-		headers := map[string]string{
-			"Host": payload,
-		}
-		
-		resp, err := s.makeRequest(ctx, "GET", targetURL, nil, headers)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		
-		body, _ := io.ReadAll(resp.Body)
-		bodyStr := string(body)
-		
-		if strings.Contains(bodyStr, payload) {
-			finding := Finding{
-				ID:          fmt.Sprintf("host-header-%d", time.Now().UnixNano()),
-				Type:        HostHeaderInject,
-				Severity:    s.calculateRiskLevel(HostHeaderInject),
-				CVSS:        cvssScores[HostHeaderInject],
-				CWE:         cweMapping[HostHeaderInject],
-				Title:       "Host Header Injection",
-				Description: "Application reflects Host header value",
-				URL:         targetURL,
-				Payload:     payload,
-				Evidence:    s.truncateString(bodyStr, 200),
-				Solution:    "Validate and sanitize Host header",
-				References: []string{
-					"https://portswigger.net/web-security/host-header",
-				},
-				Confidence: 90,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
-// Test HTTP Methods (v4.1 feature)
-func (s *Scanner) testHTTPMethods(ctx context.Context, targetURL string) {
-	for _, method := range payloads[HTTPMethodTest] {
-		resp, err := s.makeRequest(ctx, method, targetURL, nil, nil)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-		
-		if resp.StatusCode != 405 && resp.StatusCode != 501 {
-			finding := Finding{
-				ID:          fmt.Sprintf("http-method-%d", time.Now().UnixNano()),
-				Type:        HTTPMethodTest,
-				Severity:    s.calculateRiskLevel(HTTPMethodTest),
-				CVSS:        cvssScores[HTTPMethodTest],
-				CWE:         cweMapping[HTTPMethodTest],
-				Title:       "Dangerous HTTP Method Enabled",
-				Description: fmt.Sprintf("HTTP method %s is enabled", method),
-				URL:         targetURL,
-				Payload:     method,
-				Evidence:    fmt.Sprintf("Method %s returned status %d", method, resp.StatusCode),
-				Solution:    "Disable unnecessary HTTP methods",
-				References: []string{
-					"https://owasp.org/www-community/Test_HTTP_Methods",
-				},
-				Confidence: 85,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
-// Test Robots.txt Analysis (v4.1 feature)
-func (s *Scanner) testRobotsTxt(ctx context.Context, targetURL string) {
-	parsedURL, err := url.Parse(targetURL)
-	if err != nil {
-		return
-	}
-	
-	robotURL := fmt.Sprintf("%s://%s/robots.txt", parsedURL.Scheme, parsedURL.Host)
-	resp, err := s.makeRequest(ctx, "GET", robotURL, nil, nil)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode == 200 {
-		body, _ := io.ReadAll(resp.Body)
-		bodyStr := string(body)
-		
-		if strings.Contains(bodyStr, "Disallow:") {
-			finding := Finding{
-				ID:          fmt.Sprintf("robots-txt-%d", time.Now().UnixNano()),
-				Type:        RobotsTxt,
-				Severity:    s.calculateRiskLevel(RobotsTxt),
-				CVSS:        cvssScores[RobotsTxt],
-				CWE:         cweMapping[RobotsTxt],
-				Title:       "Robots.txt Information Disclosure",
-				Description: "Robots.txt reveals sensitive paths",
-				URL:         robotURL,
-				Evidence:    s.truncateString(bodyStr, 300),
-				Solution:    "Review robots.txt for sensitive information disclosure",
-				References: []string{
-					"https://owasp.org/www-community/vulnerabilities/Information_exposure_through_robots_txt",
-				},
-				Confidence: 75,
-				Timestamp:  time.Now(),
-			}
-			s.addFinding(finding)
-		}
-	}
-}
-
 // Helper functions
 func tlsVersionString(version uint16) string {
 	switch version {
@@ -2747,33 +2015,15 @@ func main() {
 		fmt.Println("  vulscan --verbose --threads 10 --output report.json http://example.com")
 		fmt.Println("  vulscan --report --config config.yaml http://example.com")
 		fmt.Println("\nSupported Vulnerability Types:")
-		fmt.Println("  🔍 Core Vulnerabilities:")
-		fmt.Println("    • SQL Injection (Classic & Blind)")
-		fmt.Println("    • Cross-Site Scripting (XSS)")
-		fmt.Println("    • Directory Traversal / LFI")
-		fmt.Println("    • Command Injection")
-		fmt.Println("    • Open Redirect")
-		fmt.Println("    • CSRF Detection")
-		fmt.Println("    • XXE (XML External Entity)")
-		fmt.Println("    • SSRF (Server-Side Request Forgery)")
-		fmt.Println("  🛡️  Security Configuration:")
-		fmt.Println("    • Security Headers Analysis")
-		fmt.Println("    • SSL/TLS Configuration")
-		fmt.Println("    • Cookie Security")
-		fmt.Println("    • CORS Configuration")
-		fmt.Println("    • Content Security Policy")
-		fmt.Println("    • Clickjacking Protection")
-		fmt.Println("  🚀 Advanced Features (v4.1):")
-		fmt.Println("    • WebSocket Security Testing")
-		fmt.Println("    • Subdomain Enumeration")
-		fmt.Println("    • Technology Fingerprinting")
-		fmt.Println("    • API Security Testing")
-		fmt.Println("    • JWT Security Analysis")
-		fmt.Println("    • GraphQL Security Testing")
-		fmt.Println("    • Host Header Injection")
-		fmt.Println("    • HTTP Method Testing")
-		fmt.Println("    • Backup Files Discovery")
-		fmt.Println("    • Robots.txt Analysis")
+		fmt.Println("  • SQL Injection (Classic & Blind)")
+		fmt.Println("  • Cross-Site Scripting (XSS)")
+		fmt.Println("  • Directory Traversal / LFI")
+		fmt.Println("  • Command Injection")
+		fmt.Println("  • Open Redirect")
+		fmt.Println("  • CSRF Detection")
+		fmt.Println("  • Security Headers Analysis")
+		fmt.Println("  • SSL/TLS Configuration")
+		fmt.Println("  • Cookie Security")
 		fmt.Println("\nRisk Levels (CVSS v3.1):")
 		fmt.Println("  🔴 CRITICAL (9.0-10.0) - Immediate action required")
 		fmt.Println("  🟠 HIGH     (7.0-8.9)  - Fix within 1 week")

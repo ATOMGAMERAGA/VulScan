@@ -13,8 +13,8 @@ func TestVersion(t *testing.T) {
 	if Version == "" {
 		t.Error("Version should not be empty")
 	}
-	if !strings.Contains(Version, "4.0.0") {
-		t.Errorf("Expected version to contain '4.0.0', got %s", Version)
+	if !strings.Contains(Version, "4.1.0") {
+		t.Errorf("Expected version to contain '4.1.0', got %s", Version)
 	}
 }
 

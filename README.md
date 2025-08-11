@@ -1,4 +1,4 @@
-# 🛡️ VulScan v4.0.0 - Advanced Web Security Scanner with AI-Powered Detection
+# 🛡️ VulScan v4.1.0 - Advanced Web Security Scanner with AI-Powered Detection
 
 [![Go Version](https://img.shields.io/badge/Go-1.19+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
@@ -7,7 +7,7 @@
 
 > **⚡ Gelişmiş, hızlı ve kapsamlı web güvenlik açığı tarayıcısı**
 
-VulScan v4.0.0, modern web uygulamalarında yaygın güvenlik açıklarını tespit eden, CVSS skorlaması yapan ve detaylı raporlar üreten açık kaynak güvenlik tarama aracıdır. Yeni sürümde AI destekli tespit algoritmaları ve genişletilmiş güvenlik açığı kütüphanesi bulunmaktadır.
+VulScan v4.1.0, modern web uygulamalarında yaygın güvenlik açıklarını tespit eden, CVSS skorlaması yapan ve detaylı raporlar üreten açık kaynak güvenlik tarama aracıdır. Yeni sürümde AI destekli tespit algoritmaları, genişletilmiş güvenlik açığı kütüphanesi ve gelişmiş keşif özellikleri bulunmaktadır.
 
 ## 🌟 Özellikler
 
@@ -141,7 +141,7 @@ chmod +x vulscan
 | `--threads` | `-t` | Paralel thread sayısı | 5 |
 | `--timeout` | | İstek zaman aşımı (saniye) | 10 |
 | `--output` | `-o` | JSON çıktı dosyası | - |
-| `--user-agent` | `-u` | Özel User-Agent | VulScan/4.0.0 |
+| `--user-agent` | `-u` | Özel User-Agent | VulScan/4.1.0 |
 | `--report` | | HTML rapor oluştur | false |
 | `--format` | `-f` | Rapor formatı (html,pdf,json) | json |
 | `--proxy` | | HTTP/HTTPS proxy | - |
@@ -220,7 +220,7 @@ chmod +x vulscan
   "scan_info": {
     "target": "https://example.com",
     "timestamp": "2025-08-10T14:30:00Z",
-    "version": "VulScan v4.0.0",
+    "version": "VulScan v4.1.0",
     "duration": "2m15s",
     "options": {
       "threads": 10,

@@ -1,11 +1,11 @@
-# VulScan v4.0.0 - Multi-stage Docker Build
+# VulScan v4.1.0 - Multi-stage Docker Build
 # Next-Gen Web Security Scanner Container
 
 # Build stage
 FROM golang:1.23-alpine AS builder
 
 # Set build arguments
-ARG VERSION=4.0.0
+ARG VERSION=4.1.0
 ARG BUILD_TIME
 ARG GIT_COMMIT
 
@@ -82,7 +82,7 @@ CMD ["--help"]
 # Metadata
 LABEL maintainer="ATOMGAMERAGA <atomgameraga@atomland.xyz>"
 LABEL version="${VERSION}"
-LABEL description="VulScan v4.0.0 - Next-Gen Web Security Scanner with AI-Powered Detection"
+LABEL description="VulScan v4.1.0 - Next-Gen Web Security Scanner with AI-Powered Detection"
 LABEL org.opencontainers.image.title="VulScan"
 LABEL org.opencontainers.image.description="Next-Gen Web Security Scanner with AI-Powered Detection for vulnerability assessment"
 LABEL org.opencontainers.image.url="https://github.com/ATOMGAMERAGA/VulScan"

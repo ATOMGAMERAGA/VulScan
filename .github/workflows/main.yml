@@ -28,7 +28,7 @@ jobs:
       run: |
         VERSION_OUTPUT=$(./vulscan --version)
         echo "Actual output: $VERSION_OUTPUT"
-        if [[ "$VERSION_OUTPUT" == *"VulScan v4.0.0"* ]]; then
+        if [[ "$VERSION_OUTPUT" == *"VulScan v4.1.0"* ]]; then
           echo "✅ Version test passed"
         else
           echo "❌ Version test failed"
@@ -56,7 +56,7 @@ jobs:
           go build -o vulscan-dev main-4.0.0.go
           VERSION_OUTPUT=$(./vulscan-dev --version)
           echo "Dev version output: $VERSION_OUTPUT"
-          if [[ "$VERSION_OUTPUT" == *"VulScan v4.0.0"* ]]; then
+          if [[ "$VERSION_OUTPUT" == *"VulScan v4.1.0"* ]]; then
             echo "✅ Dev version test passed"
           else
             echo "❌ Dev version test failed"
@@ -78,7 +78,7 @@ jobs:
     - name: Build Docker image
       run: |
         docker build \
-          --build-arg VERSION=4.0.0 \
+          --build-arg VERSION=4.1.0 \
           --build-arg BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
           --build-arg GIT_COMMIT=${{ github.sha }} \
           -t vulscan:test .
@@ -88,7 +88,7 @@ jobs:
         # Test version output
         VERSION_OUTPUT=$(docker run --rm vulscan:test --version)
         echo "Docker version output: $VERSION_OUTPUT"
-        if [[ "$VERSION_OUTPUT" == *"VulScan v4.0.0"* ]]; then
+        if [[ "$VERSION_OUTPUT" == *"VulScan v4.1.0"* ]]; then
           echo "✅ Docker version test passed"
         else
           echo "❌ Docker version test failed"

@@ -6,16 +6,17 @@ We actively support the following versions of VulScan with security updates:
 
 | Version | Supported          | End of Life |
 | ------- | ------------------ | ----------- |
-| 4.x.x   | ✅ **Current**     | TBD         |
-| 3.x.x   |⚠️ **SC Updates** | TBD         |
+| 4.1.x   | ✅ **Current**     | TBD         |
+| 4.0.x   |⚠️ **SC Updates** | TBD         |
+| 3.x.x   | ❌ **Deprecated**  | 2025-06-30  |
 | 2.x.x   | ❌ **Deprecated**  | 2024-12-31  |
 | 1.x.x   | ❌ **Deprecated**  | 2024-01-01  |
 
 ### Release Support Policy
 
-- **Current Release (3.x.x)**: Full security support, regular updates
-- **Maintenance (2.x.x)**: Critical security fixes only
-- **Deprecated (1.x.x)**: No security updates, upgrade recommended
+- **Current Release (4.1.x)**: Full security support, regular updates
+- **Security Updates (4.0.x)**: Critical security fixes only
+- **Deprecated (3.x.x and below)**: No security updates, upgrade recommended
 
 ## 🚨 Reporting a Vulnerability
 

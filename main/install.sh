@@ -320,7 +320,7 @@ EOF
     
     # SQL Injection payloads
     sudo tee "$PAYLOADS_DIR/sql.txt" > /dev/null << 'EOF'
-# SQL Injection Payloads - VulScan v4.0.0
+# SQL Injection Payloads - VulScan v4.1.0
 ' OR '1'='1
 ' OR 1=1 --
 ' UNION SELECT NULL--
@@ -338,7 +338,7 @@ EOF
     
     # XSS payloads
     sudo tee "$PAYLOADS_DIR/xss.txt" > /dev/null << 'EOF'
-# XSS Payloads - VulScan v4.0.0
+# XSS Payloads - VulScan v4.1.0
 <script>alert('XSS')</script>
 <script>alert(document.cookie)</script>
 <img src=x onerror=alert('XSS')>
@@ -354,7 +354,7 @@ EOF
     
     # Directory Traversal payloads
     sudo tee "$PAYLOADS_DIR/lfi.txt" > /dev/null << 'EOF'
-# Directory Traversal / LFI Payloads - VulScan v4.0.0
+# Directory Traversal / LFI Payloads - VulScan v4.1.0
 ../
 ..\
 ../../../etc/passwd
@@ -369,7 +369,7 @@ EOF
     
     # Command Injection payloads
     sudo tee "$PAYLOADS_DIR/cmd.txt" > /dev/null << 'EOF'
-# Command Injection Payloads - VulScan v4.0.0
+# Command Injection Payloads - VulScan v4.1.0
 ; ls
 | id
 & whoami

@@ -254,7 +254,7 @@ output:
         
         # SQL Injection payloads
         $sqlPayloads = @"
-# SQL Injection Payloads - VulScan v4.0.0
+# SQL Injection Payloads - VulScan v4.1.0
 ' OR '1'='1
 ' OR 1=1 --
 ' UNION SELECT NULL--
@@ -272,7 +272,7 @@ admin' #
         
         # XSS payloads
         $xssPayloads = @"
-# XSS Payloads - VulScan v4.0.0
+# XSS Payloads - VulScan v4.1.0
 <script>alert('XSS')</script>
 <script>alert(document.cookie)</script>
 <img src=x onerror=alert('XSS')>
@@ -288,7 +288,7 @@ javascript:alert('XSS')
         
         # Directory Traversal payloads
         $lfiPayloads = @"
-# Directory Traversal / LFI Payloads - VulScan v4.0.0
+# Directory Traversal / LFI Payloads - VulScan v4.1.0
 ../
 ..\
 ../../../etc/passwd
@@ -303,7 +303,7 @@ javascript:alert('XSS')
         
         # Command Injection payloads
         $cmdPayloads = @"
-# Command Injection Payloads - VulScan v4.0.0
+# Command Injection Payloads - VulScan v4.1.0
 ; ls
 | id
 & whoami
