@@ -1,0 +1,60 @@
+name: Main CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-main:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Test main.go
+      run: go test -v
+    
+    - name: Build main.go
+      run: go build -o vulscan main.go
+
+  test-dev:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Test dev build
+      run: |
+        if [ -f "dev/dev-test.go" ]; then
+          cd dev
+          go test -v
+        else
+          echo "dev-test.go not found, skipping dev tests"
+        fi
+    
+    - name: Build dev version
+      run: |
+        if [ -f "dev/main-4.0.0.go" ]; then
+          cd dev
+          go build -o vulscan-dev main-4.0.0.go
+        else
+          echo "dev main file not found, skipping dev build"
+        fi
