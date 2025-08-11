@@ -61,8 +61,8 @@ COPY --from=builder /build/vulscan /app/vulscan
 RUN mkdir -p /app/reports /app/configs && \
     chown -R vulscan:vulscan /app
 
-# Copy configuration files if they exist
-COPY --chown=vulscan:vulscan configs/ /app/configs/ 2>/dev/null || true
+# Create configs directory
+RUN mkdir -p /app/configs
 
 # Switch to non-root user
 USER vulscan
