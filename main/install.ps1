@@ -803,3 +803,4 @@ finally {
 if ($MyInvocation.InvocationName -ne '.') {
     Start-Installation
 }
+
