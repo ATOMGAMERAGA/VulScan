@@ -1,11 +1,11 @@
-# VulScan v3.0 - Multi-stage Docker Build
-# Advanced Web Security Scanner Container
+# VulScan v4.0.0 - Multi-stage Docker Build
+# Next-Gen Web Security Scanner Container
 
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.22-alpine AS builder
 
 # Set build arguments
-ARG VERSION=dev
+ARG VERSION=4.0.0
 ARG BUILD_TIME
 ARG GIT_COMMIT
 
@@ -28,16 +28,16 @@ COPY . .
 
 # Build the application with optimization flags
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s -X main.version=${VERSION} -X main.buildTime=${BUILD_TIME} -X main.gitCommit=${GIT_COMMIT}" \
+    -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
     -trimpath \
     -o vulscan \
     main.go
 
 # Verify the binary
-RUN ./vulscan --help
+RUN ./vulscan --version
 
 # Production stage
-FROM alpine:3.19
+FROM alpine:3.20
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -82,9 +82,9 @@ CMD ["--help"]
 # Metadata
 LABEL maintainer="ATOMGAMERAGA <atomgameraga@atomland.xyz>"
 LABEL version="${VERSION}"
-LABEL description="VulScan v3.0 - Advanced Web Security Scanner"
+LABEL description="VulScan v4.0.0 - Next-Gen Web Security Scanner with AI-Powered Detection"
 LABEL org.opencontainers.image.title="VulScan"
-LABEL org.opencontainers.image.description="Advanced Web Security Scanner for vulnerability assessment"
+LABEL org.opencontainers.image.description="Next-Gen Web Security Scanner with AI-Powered Detection for vulnerability assessment"
 LABEL org.opencontainers.image.url="https://github.com/ATOMGAMERAGA/VulScan"
 LABEL org.opencontainers.image.source="https://github.com/ATOMGAMERAGA/VulScan"
 LABEL org.opencontainers.image.version="${VERSION}"

@@ -16,7 +16,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.22'
     
     - name: Download dependencies
       run: go mod download
@@ -44,7 +44,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.22'
     
     - name: Download dependencies
       run: go mod download
@@ -64,4 +64,48 @@ jobs:
           fi
         else
           echo "dev main file not found, skipping dev build"
+        fi
+
+  docker-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      run: |
+        docker build \
+          --build-arg VERSION=4.0.0 \
+          --build-arg BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+          --build-arg GIT_COMMIT=${{ github.sha }} \
+          -t vulscan:test .
+    
+    - name: Test Docker image
+      run: |
+        # Test version output
+        VERSION_OUTPUT=$(docker run --rm vulscan:test --version)
+        echo "Docker version output: $VERSION_OUTPUT"
+        if [[ "$VERSION_OUTPUT" == *"VulScan v4.0.0"* ]]; then
+          echo "✅ Docker version test passed"
+        else
+          echo "❌ Docker version test failed"
+          exit 1
+        fi
+        
+        # Test help output
+        docker run --rm vulscan:test --help
+        echo "✅ Docker help test passed"
+    
+    - name: Test Docker image security
+      run: |
+        # Check if running as non-root user
+        USER_ID=$(docker run --rm vulscan:test id -u)
+        if [ "$USER_ID" != "0" ]; then
+          echo "✅ Docker security test passed - running as non-root user (UID: $USER_ID)"
+        else
+          echo "❌ Docker security test failed - running as root user"
+          exit 1
         fi
