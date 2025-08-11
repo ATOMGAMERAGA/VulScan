@@ -2,7 +2,7 @@
 # Next-Gen Web Security Scanner Container
 
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Set build arguments
 ARG VERSION=4.0.0
