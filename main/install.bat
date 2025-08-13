@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title VulScan Windows Installer v4.1.0
+title VulScan Windows Installer v4.1
 color 0A
 chcp 65001 >nul 2>&1
 
