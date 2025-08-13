@@ -347,12 +347,12 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Create Release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: installer-v4.1.0-${{ github.run_number }}
-          release_name: VulScan Installer v4.1.0 Build ${{ github.run_number }}
+          name: VulScan Installer v4.1.0 Build ${{ github.run_number }}
           body: |
             ## 🚀 VulScan Installer v4.1.0
             
@@ -382,7 +382,6 @@ jobs:
             - Download Test: ✅ PASSED
             - Structure Test: ✅ PASSED
             - Encoding Test: ✅ PASSED
-            
           draft: false
           prerelease: falsecan Installer v4.1.0 Build ${{ github.run_number }}
         body: |
