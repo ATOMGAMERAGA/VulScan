@@ -1,5 +1,6 @@
 # VulScan Quick Installer - PowerShell Wrapper v4.1.0
 # Bu scripti GitHub'a install.ps1 olarak kaydedin
+# Made by Atom Gamer Arda A.G.A
 
 param(
     [switch]$Dev,
