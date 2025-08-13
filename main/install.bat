@@ -376,9 +376,9 @@ echo ../../../etc/passwd
 echo ..\..\..\windows\system32\drivers\etc\hosts
 echo ....//....//....//etc/passwd
 echo ....\\....\\....\\windows\system32\drivers\etc\hosts
-echo %252e%252e%252f
-echo %c0%af../
-echo %c1%9c../
+echo %%252e%%252e%%252f
+echo %%c0%%af../
+echo %%c1%%9c../
 echo /var/www/html/../../../../etc/passwd
 echo file:///etc/passwd
 echo file:///c:/windows/system32/drivers/etc/hosts
@@ -428,7 +428,7 @@ for /f "tokens=2*" %%i in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Ses
 echo %CURRENT_PATH% | find /i "%INSTALL_DIR%" >nul
 if %errorLevel% neq 0 (
     :: PATH'e ekle
-    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_DIR%;%INSTALL_DIR%" /f >nul
+    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v PATH /t REG_EXPAND_SZ /d "%CURRENT_PATH%;%INSTALL_DIR%" /f >nul
     if %errorLevel% neq 0 (
         echo [WARNING] PATH guncellenemedi! Manuel olarak %INSTALL_DIR% ekleyin.
     ) else (
