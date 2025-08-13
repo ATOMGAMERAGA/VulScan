@@ -66,20 +66,41 @@ VulScan v4.1.0, modern web uygulamalarında yaygın güvenlik açıklarını tes
 
 > **📋 Detaylı kurulum talimatları ve farklı işletim sistemleri için [Wiki - Hızlı Başlangıç](https://github.com/ATOMGAMERAGA/VulScan/wiki#-h%C4%B1zl%C4%B1-ba%C5%9Flang%C4%B1%C3%A7) sayfasını ziyaret edin.**
 
-**Windows (Önerilen kurulum yöntemi):**
+#### 🪟 Windows Otomatik Kurulum (Önerilen)
+
+**Seçenek 1: PowerShell Tek Komut Kurulum** ⚡
 ```powershell
-# Otomatik kurulum scripti
-iwr -useb https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/install.ps1 | iex
+# Ana kurulum yöntemi (Önerilen)
+irm https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main/install.ps1 | iex
 ```
 
-**Linux (Önerilen kurulum yöntemi):**
+**Seçenek 2: Batch Installer (Yedek Kurulum)** 🛠️
+```powershell
+# PowerShell ile batch installer'ı indir ve çalıştır
+iwr https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main/install.bat -OutFile install.bat && .\install.bat
+
+# Veya CMD kullanarak
+powershell -c "iwr https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main/install.bat -OutFile install.bat" && install.bat
+```
+
+> **💡 Hangi kurulum yöntemini seçmeliyim?**
+> - **PowerShell kurulumu** daha hızlı ve otomatiktir (Seçenek 1)
+> - **Batch kurulumu** daha fazla kontrole ve seçeneğe sahiptir (Seçenek 2)
+> - Her iki yöntem de tam otomatik kurulum yapacaktır
+
+#### 🐧 Linux Otomatik Kurulum
 ```bash
 # Otomatik kurulum scripti
 bash <(curl -sSL https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main/safe-install.sh)
-
 ```
 
-#### Hızlı Kurulum
+#### 🍎 macOS Otomatik Kurulum
+```bash
+# Otomatik kurulum scripti
+bash <(curl -sSL https://raw.githubusercontent.com/ATOMGAMERAGA/VulScan/main/main/safe-install.sh)
+```
+
+#### Manual Kurulum (Tüm Platformlar)
 
 ```bash
 # Repository'yi klonlayın
@@ -99,34 +120,34 @@ chmod +x vulscan
 
 #### Platform Özel Kurulumlar
 
-| Platform | Kurulum Yöntemi | Wiki Linki |
-|----------|------------------|------------|
-| 🐧 **Linux** | Native binary / Package Manager | [Linux Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#linux-kurulumu) |
-| 🍎 **macOS** | Homebrew / Native binary | [macOS Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#macos-kurulumu) |
-| 🪟 **Windows** | PowerShell / WSL | [Windows Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#windows-kurulumu) |
-| 🐳 **Docker** | Container deployment | [Docker Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#docker-kurulumu) |
+| Platform | Otomatik Kurulum | Manuel Kurulum | Wiki Linki |
+|----------|------------------|----------------|------------|
+| 🪟 **Windows** | PowerShell + Batch | Native binary | [Windows Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#windows-kurulumu) |
+| 🐧 **Linux** | Script + Package Manager | Native binary | [Linux Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#linux-kurulumu) |
+| 🍎 **macOS** | Script + Homebrew | Native binary | [macOS Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#macos-kurulumu) |
+| 🐳 **Docker** | - | Container deployment | [Docker Kurulumu](https://github.com/ATOMGAMERAGA/VulScan/wiki#docker-kurulumu) |
 
 ### ⚡ Hızlı Test
 
 ```bash
 # Temel tarama testi (yeni özelliklerle)
-./vulscan http://example.com/page.php?id=1
+vulscan http://example.com/page.php?id=1
 
 # Detaylı tarama (geliştirilmiş performans)
-./vulscan http://example.com --verbose --threads 10
+vulscan http://example.com --verbose --threads 10
 
 # Çoklu format rapor oluşturma
-./vulscan http://example.com --output report.json --report
+vulscan http://example.com --output report.json --report
 
 # API endpoint taraması
-./vulscan -v http://api.example.com/v1/users
+vulscan -v http://api.example.com/v1/users
 
 # GraphQL endpoint taraması
-./vulscan -v http://example.com/graphql
+vulscan -v http://example.com/graphql
 
 # Yardım ve sürüm bilgisi
-./vulscan --help
-./vulscan --version
+vulscan --help
+vulscan --version
 ```
 
 > **💡 İpucu:** İlk kez kullanıyorsanız `--help` parametresi ile tüm seçenekleri görebilirsiniz.
@@ -155,12 +176,12 @@ chmod +x vulscan
 
 #### 🎯 Temel Web Uygulaması Taraması
 ```bash
-./vulscan https://webapp.example.com/login.php?user=admin&pass=123
+vulscan https://webapp.example.com/login.php?user=admin&pass=123
 ```
 
 #### 🔍 Detaylı Güvenlik Denetimi
 ```bash
-./vulscan https://api.example.com/v1/users?id=1 \
+vulscan https://api.example.com/v1/users?id=1 \
   --verbose \
   --threads 15 \
   --timeout 20 \
@@ -170,7 +191,7 @@ chmod +x vulscan
 
 #### 🏢 Kurumsal Tarama
 ```bash
-./vulscan https://intranet.company.com/dashboard \
+vulscan https://intranet.company.com/dashboard \
   --user-agent "Security-Audit-Bot/1.0" \
   --threads 8 \
   --rate-limit 5 \
@@ -184,7 +205,7 @@ chmod +x vulscan
 #### 🔧 Payload Dosyaları ile Tarama
 ```bash
 # Özel payload dosyaları kullanarak tarama
-./vulscan http://target.com/app?id=1 \
+vulscan http://target.com/app?id=1 \
   --config custom-payloads.yaml \
   --verbose \
   --output detailed_scan.json
@@ -193,7 +214,7 @@ chmod +x vulscan
 #### 🌐 Proxy ve Header Desteği
 ```bash
 # Proxy üzerinden özel headerlar ile tarama
-./vulscan https://api.example.com/v1/users \
+vulscan https://api.example.com/v1/users \
   --proxy socks5://127.0.0.1:9050 \
   --headers "X-Forwarded-For:127.0.0.1,Accept:application/json" \
   --rate-limit 3
