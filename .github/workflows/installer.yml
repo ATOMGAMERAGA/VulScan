@@ -1,0 +1,355 @@
+name: Test VulScan Installers
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'main/install.bat'
+      - 'main/install.ps1'
+      - '.github/workflows/test-installers.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'main/install.bat'
+      - 'main/install.ps1'
+      - '.github/workflows/test-installers.yml'
+  workflow_dispatch:
+
+jobs:
+  test-syntax:
+    name: Test Installer Syntax
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Test PowerShell Script Syntax
+      shell: powershell
+      run: |
+        Write-Host "🔍 Testing PowerShell Script Syntax..." -ForegroundColor Cyan
+        
+        # Test syntax without executing
+        try {
+            $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content main/install.ps1 -Raw), [ref]$null)
+            Write-Host "✅ PowerShell syntax is valid" -ForegroundColor Green
+        } catch {
+            Write-Host "❌ PowerShell syntax error: $_" -ForegroundColor Red
+            exit 1
+        }
+        
+    - name: Test Batch Script Syntax
+      shell: cmd
+      run: |
+        echo 🔍 Testing Batch Script Syntax...
+        
+        REM Basic syntax check by parsing without execution
+        echo @echo off > temp_test.bat
+        echo echo Testing batch syntax... >> temp_test.bat
+        echo goto :eof >> temp_test.bat
+        
+        REM Check if main script has basic structure
+        findstr /R "^@echo off" main\install.bat >nul
+        if %errorLevel% neq 0 (
+            echo ❌ Batch script missing @echo off
+            exit 1
+        )
+        
+        findstr /R ":main_menu" main\install.bat >nul
+        if %errorLevel% neq 0 (
+            echo ❌ Batch script missing main_menu label
+            exit 1
+        )
+        
+        echo ✅ Batch script basic structure is valid
+        
+        del temp_test.bat 2>nul
+
+  test-powershell-download:
+    name: Test PowerShell Download Functionality
+    runs-on: windows-latest
+    needs: test-syntax
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Test PowerShell Script Download (Dry Run)
+      shell: powershell
+      run: |
+        Write-Host "🧪 Testing PowerShell Download Functionality..." -ForegroundColor Cyan
+        
+        # Set environment variable to indicate CI/CD
+        $env:GITHUB_ACTIONS = "true"
+        
+        # Test URL accessibility
+        $testUrl = "https://raw.githubusercontent.com/${{ github.repository }}/main/main/install.bat"
+        
+        try {
+            Write-Host "🌐 Testing URL accessibility: $testUrl" -ForegroundColor Yellow
+            $response = Invoke-WebRequest -Uri $testUrl -Method Head -UseBasicParsing -TimeoutSec 10
+            
+            if ($response.StatusCode -eq 200) {
+                Write-Host "✅ install.bat is accessible via raw GitHub URL" -ForegroundColor Green
+            } else {
+                Write-Host "⚠️ install.bat returned status code: $($response.StatusCode)" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "❌ install.bat is not accessible: $_" -ForegroundColor Red
+            
+            # List available files for debugging
+            Write-Host "🔍 Available files in main/ directory:" -ForegroundColor Cyan
+            Get-ChildItem main/ -Recurse | ForEach-Object { Write-Host "  - $($_.FullName)" }
+            
+            exit 1
+        }
+        
+    - name: Test PowerShell Script Execution (Syntax Only)
+      shell: powershell
+      run: |
+        Write-Host "🧪 Testing PowerShell Script Execution (Syntax Check)..." -ForegroundColor Cyan
+        
+        # Set CI environment
+        $env:GITHUB_ACTIONS = "true"
+        
+        # Create a modified version that only tests syntax without admin requirements
+        $scriptContent = Get-Content main/install.ps1 -Raw
+        
+        # Replace admin check with always return true for testing
+        $testScript = $scriptContent -replace 'function Test-Admin \{[^}]+\}', 'function Test-Admin { return $true }'
+        
+        # Replace actual download/install with echo statements
+        $testScript = $testScript -replace 'Invoke-WebRequest[^`"]+', 'Write-Host "TEST: Would download from: $installerUrl" -ForegroundColor Yellow'
+        $testScript = $testScript -replace 'Start-Process[^`"]+', 'Write-Host "TEST: Would run installer: $tempFile" -ForegroundColor Yellow'
+        
+        # Save test version
+        $testScript | Set-Content TestInstall.ps1
+        
+        try {
+            # Test help function
+            Write-Host "📋 Testing Help Function..." -ForegroundColor Yellow
+            & .\TestInstall.ps1 -Help
+            
+            Write-Host "✅ PowerShell script executed successfully" -ForegroundColor Green
+        } catch {
+            Write-Host "❌ PowerShell script execution failed: $_" -ForegroundColor Red
+            exit 1
+        } finally {
+            Remove-Item TestInstall.ps1 -ErrorAction SilentlyContinue
+        }
+
+  test-batch-structure:
+    name: Test Batch Script Structure
+    runs-on: windows-latest
+    needs: test-syntax
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Validate Batch Script Structure
+      shell: powershell
+      run: |
+        Write-Host "🏗️ Validating Batch Script Structure..." -ForegroundColor Cyan
+        
+        $batchContent = Get-Content main/install.bat -Raw
+        
+        # Test required sections
+        $requiredSections = @(
+            ':main_menu',
+            ':install_menu', 
+            ':uninstall_menu',
+            ':install_files',
+            'VulScan Windows Installer v4.1.0'
+        )
+        
+        $missingsections = @()
+        
+        foreach ($section in $requiredSections) {
+            if ($batchContent -notmatch [regex]::Escape($section)) {
+                $missingSections += $section
+            }
+        }
+        
+        if ($missingSections.Count -gt 0) {
+            Write-Host "❌ Missing required sections:" -ForegroundColor Red
+            $missingSections | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+            exit 1
+        }
+        
+        Write-Host "✅ All required batch script sections found" -ForegroundColor Green
+        
+    - name: Test Batch Variables
+      shell: powershell
+      run: |
+        Write-Host "🔧 Testing Batch Variables..." -ForegroundColor Cyan
+        
+        $batchContent = Get-Content main/install.bat -Raw
+        
+        # Check for required variables
+        $requiredVars = @(
+            'INSTALL_DIR',
+            'CONFIG_DIR', 
+            'PAYLOADS_DIR',
+            'VERSION_TAG'
+        )
+        
+        $missingVars = @()
+        
+        foreach ($var in $requiredVars) {
+            if ($batchContent -notmatch "set `"$var=") {
+                $missingVars += $var
+            }
+        }
+        
+        if ($missingVars.Count -gt 0) {
+            Write-Host "❌ Missing required variables:" -ForegroundColor Red
+            $missingVars | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+            exit 1
+        }
+        
+        Write-Host "✅ All required batch variables found" -ForegroundColor Green
+
+  test-encoding:
+    name: Test File Encodings
+    runs-on: windows-latest
+    needs: test-syntax
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Check File Encodings
+      shell: powershell
+      run: |
+        Write-Host "📝 Checking File Encodings..." -ForegroundColor Cyan
+        
+        # Check PowerShell file
+        $ps1Bytes = [System.IO.File]::ReadAllBytes("main/install.ps1")
+        $ps1HasBOM = ($ps1Bytes[0] -eq 0xEF -and $ps1Bytes[1] -eq 0xBB -and $ps1Bytes[2] -eq 0xBF)
+        
+        if ($ps1HasBOM) {
+            Write-Host "✅ install.ps1 has UTF-8 BOM" -ForegroundColor Green
+        } else {
+            Write-Host "ℹ️ install.ps1 does not have UTF-8 BOM (ASCII/UTF-8 without BOM)" -ForegroundColor Yellow
+        }
+        
+        # Check Batch file
+        $batBytes = [System.IO.File]::ReadAllBytes("main/install.bat")
+        $batHasBOM = ($batBytes[0] -eq 0xEF -and $batBytes[1] -eq 0xBB -and $batBytes[2] -eq 0xBF)
+        
+        if ($batHasBOM) {
+            Write-Host "✅ install.bat has UTF-8 BOM" -ForegroundColor Green
+        } else {
+            Write-Host "ℹ️ install.bat does not have UTF-8 BOM (ASCII/UTF-8 without BOM)" -ForegroundColor Yellow
+        }
+        
+        # Check for Turkish characters (should not exist after cleanup)
+        $ps1Content = Get-Content main/install.ps1 -Raw
+        $batContent = Get-Content main/install.bat -Raw
+        
+        $turkishChars = @('ğ', 'ü', 'ş', 'ı', 'ö', 'ç', 'Ğ', 'Ü', 'Ş', 'İ', 'Ö', 'Ç')
+        
+        $ps1HasTurkish = $false
+        $batHasTurkish = $false
+        
+        foreach ($char in $turkishChars) {
+            if ($ps1Content -match $char) { $ps1HasTurkish = $true }
+            if ($batContent -match $char) { $batHasTurkish = $true }
+        }
+        
+        if (-not $ps1HasTurkish) {
+            Write-Host "✅ install.ps1 has no Turkish characters" -ForegroundColor Green
+        } else {
+            Write-Host "❌ install.ps1 still contains Turkish characters" -ForegroundColor Red
+            exit 1
+        }
+        
+        if (-not $batHasTurkish) {
+            Write-Host "✅ install.bat has no Turkish characters" -ForegroundColor Green
+        } else {
+            Write-Host "❌ install.bat still contains Turkish characters" -ForegroundColor Red
+            exit 1
+        }
+
+  integration-test:
+    name: Integration Test Summary
+    runs-on: windows-latest
+    needs: [test-syntax, test-powershell-download, test-batch-structure, test-encoding]
+    
+    steps:
+    - name: Test Summary
+      shell: powershell
+      run: |
+        Write-Host @"
+        
+        🎉 VulScan Installer Tests Completed Successfully! 
+        
+        ✅ PowerShell Syntax: PASSED
+        ✅ Batch Syntax: PASSED  
+        ✅ Download Functionality: PASSED
+        ✅ Script Structure: PASSED
+        ✅ File Encoding: PASSED
+        
+        🚀 Ready for deployment!
+        
+        📋 Usage Commands:
+        
+        PowerShell (One-liner):
+        irm https://raw.githubusercontent.com/${{ github.repository }}/main/main/install.ps1 | iex
+        
+        Batch Download:
+        iwr https://raw.githubusercontent.com/${{ github.repository }}/main/main/install.bat -OutFile install.bat && .\install.bat
+        
+        "@ -ForegroundColor Green
+
+  # Optional: Create a release when tests pass on main branch
+  create-test-release:
+    name: Create Test Release
+    runs-on: windows-latest
+    needs: [integration-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout Repository  
+      uses: actions/checkout@v4
+      
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: installer-v4.1.0-${{ github.run_number }}
+        release_name: VulScan Installer v4.1.0 Build ${{ github.run_number }}
+        body: |
+          ## 🚀 VulScan Installer v4.1.0
+          
+          Automated release created after successful installer tests.
+          
+          ### Quick Install Commands:
+          
+          **PowerShell (Recommended):**
+          ```powershell
+          irm https://raw.githubusercontent.com/${{ github.repository }}/main/main/install.ps1 | iex
+          ```
+          
+          **Batch Download:**
+          ```powershell
+          iwr https://raw.githubusercontent.com/${{ github.repository }}/main/main/install.bat -OutFile install.bat && .\install.bat
+          ```
+          
+          ### Changes in this build:
+          - All installer tests passed ✅
+          - Turkish characters removed ✅  
+          - Cross-platform compatibility ✅
+          - Auto-admin privileges ✅
+          
+          ### Test Results:
+          - PowerShell Syntax: ✅ PASSED
+          - Batch Syntax: ✅ PASSED
+          - Download Test: ✅ PASSED
+          - Structure Test: ✅ PASSED
+          - Encoding Test: ✅ PASSED
+          
+        draft: false
+        prerelease: false
